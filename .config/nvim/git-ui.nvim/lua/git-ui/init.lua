@@ -89,7 +89,7 @@ local function setup_diff_keymaps()
   end
 
   map(km.close, function() M.close() end, "Close")
-  map("<Esc>", function() ui.focus_status() end, "Back to status")
+  map("<Esc>", function() M.close() end, "Close")
   map(km.focus_diff, function() ui.focus_status() end, "Back to status")
   map(km.stage_hunk, panel.stage_hunk, "Stage hunk")
   map(km.unstage_hunk, panel.unstage_hunk, "Unstage hunk")

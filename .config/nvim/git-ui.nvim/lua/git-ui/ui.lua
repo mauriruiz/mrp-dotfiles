@@ -38,6 +38,12 @@ function M.open(status_width)
   if state.is_open then return end
   state.prev_win = vim.api.nvim_get_current_win()
 
+  -- Calculate layout dimensions
+  local editor_width = vim.o.columns
+  local editor_height = vim.o.lines - 2 -- subtract statusline + cmdline
+  local scrollbar_width = 2
+  local diff_width = math.max(1, editor_width - status_width - scrollbar_width)
+
   -- Create buffers
   state.status_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[state.status_buf].buftype = "nofile"
@@ -55,25 +61,39 @@ function M.open(status_width)
   vim.bo[state.scrollbar_buf].bufhidden = "wipe"
   vim.bo[state.scrollbar_buf].swapfile = false
 
-  -- Open a new tab so the UI is isolated
-  vim.cmd("tabnew")
-  local empty_buf = vim.api.nvim_get_current_buf()
+  -- Full-screen floating windows (no tabs)
+  state.status_win = vim.api.nvim_open_win(state.status_buf, true, {
+    relative = "editor",
+    row = 0,
+    col = 0,
+    width = status_width,
+    height = editor_height,
+    style = "minimal",
+    border = "none",
+    zindex = 40,
+  })
 
-  -- Right side: diff preview
-  local main_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(main_win, state.diff_buf)
-  state.diff_win = main_win
+  state.diff_win = vim.api.nvim_open_win(state.diff_buf, false, {
+    relative = "editor",
+    row = 0,
+    col = status_width,
+    width = diff_width,
+    height = editor_height,
+    style = "minimal",
+    border = "none",
+    zindex = 40,
+  })
 
-  -- Delete the empty buffer tabnew created
-  if vim.api.nvim_buf_is_valid(empty_buf) and empty_buf ~= state.diff_buf then
-    pcall(vim.api.nvim_buf_delete, empty_buf, { force = true })
-  end
-
-  -- Left side: status panel
-  vim.cmd("topleft vsplit")
-  state.status_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(state.status_win, state.status_buf)
-  vim.api.nvim_win_set_width(state.status_win, status_width)
+  state.scrollbar_win = vim.api.nvim_open_win(state.scrollbar_buf, false, {
+    relative = "editor",
+    row = 0,
+    col = status_width + diff_width,
+    width = scrollbar_width,
+    height = editor_height,
+    style = "minimal",
+    border = "none",
+    zindex = 40,
+  })
 
   -- Status panel window options
   local status_opts = {
@@ -107,13 +127,7 @@ function M.open(status_width)
     vim.wo[state.diff_win][k] = v
   end
 
-  -- Right edge: scrollbar
-  vim.api.nvim_set_current_win(state.diff_win)
-  vim.cmd("rightbelow vsplit")
-  state.scrollbar_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(state.scrollbar_win, state.scrollbar_buf)
-  vim.api.nvim_win_set_width(state.scrollbar_win, 2)
-
+  -- Scrollbar window options
   local sb_opts = {
     number = false,
     relativenumber = false,
@@ -132,26 +146,18 @@ function M.open(status_width)
 
   state.is_open = true
 
-  -- Auto-cleanup when buffers are wiped (e.g. user closes tab manually)
-  vim.api.nvim_create_autocmd("BufWipeout", {
-    buffer = state.status_buf,
-    once = true,
-    callback = function()
-      state.is_open = false
-      if buf_valid(state.diff_buf) then
-        pcall(vim.api.nvim_buf_delete, state.diff_buf, { force = true })
-      end
-      if buf_valid(state.scrollbar_buf) then
-        pcall(vim.api.nvim_buf_delete, state.scrollbar_buf, { force = true })
-      end
-      state.status_buf = nil
-      state.status_win = nil
-      state.diff_buf = nil
-      state.diff_win = nil
-      state.scrollbar_buf = nil
-      state.scrollbar_win = nil
-    end,
-  })
+  -- Auto-cleanup when any buffer is wiped (e.g. user :q on a panel)
+  for _, buf in ipairs({ state.status_buf, state.diff_buf, state.scrollbar_buf }) do
+    vim.api.nvim_create_autocmd("BufWipeout", {
+      buffer = buf,
+      once = true,
+      callback = function()
+        vim.schedule(function()
+          M.close()
+        end)
+      end,
+    })
+  end
 
   -- Focus the status panel
   vim.api.nvim_set_current_win(state.status_win)
@@ -161,14 +167,16 @@ function M.close()
   if not state.is_open then return end
   state.is_open = false
 
-  if buf_valid(state.status_buf) then
-    pcall(vim.api.nvim_buf_delete, state.status_buf, { force = true })
+  -- Close all floating windows (bufhidden=wipe handles buffer cleanup)
+  for _, win in ipairs({ state.scrollbar_win, state.diff_win, state.status_win }) do
+    if win_valid(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
   end
-  if buf_valid(state.diff_buf) then
-    pcall(vim.api.nvim_buf_delete, state.diff_buf, { force = true })
-  end
-  if buf_valid(state.scrollbar_buf) then
-    pcall(vim.api.nvim_buf_delete, state.scrollbar_buf, { force = true })
+
+  -- Restore focus to previous window
+  if state.prev_win and win_valid(state.prev_win) then
+    pcall(vim.api.nvim_set_current_win, state.prev_win)
   end
 
   state.status_buf = nil
