@@ -1,0 +1,415 @@
+local M = {}
+
+local git = require("git-ui.git")
+local ui = require("git-ui.ui")
+local config = require("git-ui.config")
+
+local state = {
+  files = { staged = {}, changed = {}, untracked = {} },
+  branch = { name = "", ahead = 0, behind = 0 },
+  sections = {
+    staged = { collapsed = false },
+    changed = { collapsed = false },
+    untracked = { collapsed = false },
+  },
+  line_map = {},
+  loading = false,
+}
+
+function M.get_state()
+  return state
+end
+
+local function get_status_icon(status)
+  local icons = config.options.icons
+  local map = {
+    M = icons.modified,
+    A = icons.added,
+    D = icons.deleted,
+    R = icons.renamed,
+    ["?"] = icons.untracked,
+  }
+  return map[status] or status
+end
+
+local function get_status_hl(status, section)
+  if section == "staged" then return "GitUIStaged" end
+  local map = {
+    M = "GitUIModified",
+    D = "GitUIDeleted",
+    A = "GitUIStaged",
+    R = "GitUIRenamed",
+    ["?"] = "GitUIUntracked",
+  }
+  return map[status] or "Normal"
+end
+
+--- Render the status panel contents.
+function M.render()
+  local lines = {}
+  local highlights = {}
+  local line_map = {}
+  local icons = config.options.icons
+
+  -- Header: branch info
+  local branch = state.branch
+  local branch_line = string.format("  %s %s", icons.branch, branch.name)
+  if branch.ahead > 0 or branch.behind > 0 then
+    branch_line = branch_line .. string.format("  ↑%d ↓%d", branch.ahead, branch.behind)
+  end
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+  table.insert(lines, branch_line)
+  table.insert(highlights, { group = "GitUIBranch", line = #lines - 1 })
+  line_map[#lines] = { type = "header" }
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  local total_files = #state.files.staged + #state.files.changed + #state.files.untracked
+  local is_clean = total_files == 0
+
+  if is_clean then
+    table.insert(lines, "  Working tree clean ✓")
+    table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+    table.insert(lines, "")
+    line_map[#lines] = { type = "blank" }
+  else
+    -- Sections
+    local section_order = { "staged", "changed", "untracked" }
+    local section_names = {
+      staged = "Staged Changes",
+      changed = "Changes",
+      untracked = "Untracked",
+    }
+
+    for _, section in ipairs(section_order) do
+      local files = state.files[section]
+      if #files > 0 then
+        local sec = state.sections[section]
+        local icon = sec.collapsed and icons.section_closed or icons.section_open
+        local header = string.format("  %s %s (%d)", icon, section_names[section], #files)
+        table.insert(lines, header)
+        table.insert(highlights, { group = "GitUISectionHeader", line = #lines - 1 })
+        line_map[#lines] = { type = "section", section = section }
+
+        if not sec.collapsed then
+          for i, file in ipairs(files) do
+            local status_icon = section == "staged" and icons.staged or get_status_icon(file.status)
+            local display = string.format("    %s  %s", status_icon, file.path)
+            table.insert(lines, display)
+            table.insert(highlights, {
+              group = get_status_hl(file.status, section),
+              line = #lines - 1,
+            })
+            line_map[#lines] = { type = "file", section = section, index = i, file = file }
+          end
+        end
+
+        table.insert(lines, "")
+        line_map[#lines] = { type = "blank" }
+      end
+    end
+  end
+
+  -- Separator
+  local sep = "  " .. string.rep("─", config.options.layout.status_width - 4)
+  table.insert(lines, sep)
+  table.insert(highlights, { group = "GitUISeparator", line = #lines - 1 })
+  line_map[#lines] = { type = "separator" }
+
+  -- Help footer
+  local help = {
+    "  s stage     u unstage   c commit",
+    "  S stage all U unstage all        ",
+    "  P push      L pull      b branch",
+    "  n new branch  r refresh  q quit ",
+    "  Tab diff  ]c next change [c prev",
+  }
+  for _, h in ipairs(help) do
+    table.insert(lines, h)
+    table.insert(highlights, { group = "GitUIHelpText", line = #lines - 1 })
+    line_map[#lines] = { type = "help" }
+  end
+
+  state.line_map = line_map
+  ui.set_status_lines(lines, highlights)
+end
+
+--- Move cursor to the first file line after render.
+local function cursor_to_first_file()
+  local ui_state = ui.get_state()
+  if not ui_state.status_win or not vim.api.nvim_win_is_valid(ui_state.status_win) then return end
+  for line_nr, item in pairs(state.line_map) do
+    if item.type == "file" then
+      pcall(vim.api.nvim_win_set_cursor, ui_state.status_win, { line_nr, 0 })
+      return
+    end
+  end
+end
+
+--- Refresh git status and branch info, then re-render.
+function M.refresh(callback)
+  if state.loading then return end
+  state.loading = true
+
+  local done = 0
+  local total = 2
+
+  local function check()
+    done = done + 1
+    if done >= total then
+      state.loading = false
+      M.render()
+      M.update_diff_for_cursor()
+      if callback then callback() end
+    end
+  end
+
+  git.status(function(files)
+    state.files = files
+    check()
+  end)
+
+  git.branch_info(function(info)
+    state.branch = info
+    check()
+  end)
+end
+
+--- Get the line_map item at the current cursor position.
+function M.get_item_at_cursor()
+  local ui_state = ui.get_state()
+  if not ui_state.status_win or not vim.api.nvim_win_is_valid(ui_state.status_win) then
+    return nil
+  end
+  local cursor = vim.api.nvim_win_get_cursor(ui_state.status_win)
+  return state.line_map[cursor[1]]
+end
+
+--- Update the diff preview panel based on the currently selected file.
+function M.update_diff_for_cursor()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then
+    ui.set_diff_lines({ "", "  Select a file to preview its diff" })
+    return
+  end
+
+  local file = item.file
+  local staged = item.section == "staged"
+
+  local function show_diff(diff_text)
+    if not diff_text or diff_text == "" then
+      ui.set_diff_lines({ "", "  No changes to display" })
+      return
+    end
+    local lines = vim.split(diff_text, "\n")
+    ui.set_diff_lines(lines)
+  end
+
+  if item.section == "untracked" then
+    git.diff_untracked(file.actual_path, show_diff)
+  else
+    git.diff(file.actual_path, staged, show_diff)
+  end
+end
+
+---------------------------------------------------------------------------
+-- Actions
+---------------------------------------------------------------------------
+
+function M.stage_file()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then return end
+  if item.section == "staged" then return end
+  git.stage(item.file.actual_path, function(ok, err)
+    if ok then
+      M.refresh()
+    else
+      vim.notify("Stage failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.unstage_file()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then return end
+  if item.section ~= "staged" then return end
+  git.unstage(item.file.actual_path, function(ok, err)
+    if ok then
+      M.refresh()
+    else
+      vim.notify("Unstage failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.toggle_section()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "section" then return end
+  state.sections[item.section].collapsed = not state.sections[item.section].collapsed
+  M.render()
+end
+
+function M.do_commit()
+  vim.ui.input({ prompt = "  Commit message: " }, function(msg)
+    if not msg or msg == "" then return end
+    git.commit(msg, function(ok, output)
+      if ok then
+        vim.notify("✓ " .. vim.trim(output):match("[^\n]*$"), vim.log.levels.INFO)
+        M.refresh()
+      else
+        vim.notify("Commit failed: " .. output, vim.log.levels.ERROR)
+      end
+    end)
+  end)
+end
+
+function M.do_push()
+  vim.notify("Pushing...", vim.log.levels.INFO)
+  git.push(function(ok, output)
+    if ok then
+      vim.notify("✓ Pushed successfully", vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Push failed: " .. output, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.do_pull()
+  vim.notify("Pulling...", vim.log.levels.INFO)
+  git.pull(function(ok, output)
+    if ok then
+      vim.notify("✓ Pulled successfully", vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Pull failed: " .. output, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.show_branches()
+  git.branches(function(branches)
+    if #branches == 0 then
+      vim.notify("No branches found", vim.log.levels.WARN)
+      return
+    end
+    local items = {}
+    for _, b in ipairs(branches) do
+      table.insert(items, (b.current and "● " or "  ") .. b.name)
+    end
+    vim.ui.select(items, { prompt = " Switch branch:" }, function(_, idx)
+      if not idx then return end
+      local branch = branches[idx]
+      if branch.current then return end
+      git.checkout(branch.name, function(ok, output)
+        if ok then
+          vim.notify("Switched to " .. branch.name, vim.log.levels.INFO)
+          M.refresh()
+        else
+          vim.notify("Checkout failed: " .. output, vim.log.levels.ERROR)
+        end
+      end)
+    end)
+  end)
+end
+
+function M.create_branch()
+  vim.ui.input({ prompt = "  New branch name: " }, function(name)
+    if not name or name == "" then return end
+    git.create_branch(name, function(ok, output)
+      if ok then
+        vim.notify("Created branch " .. name, vim.log.levels.INFO)
+        M.refresh()
+      else
+        vim.notify("Failed: " .. output, vim.log.levels.ERROR)
+      end
+    end)
+  end)
+end
+
+---------------------------------------------------------------------------
+-- Hunk operations
+---------------------------------------------------------------------------
+
+--- Extract the diff header and the target hunk from raw diff lines.
+--- Uses stored raw_diff_lines (since the buffer no longer has diff prefixes).
+---@return string|nil patch, table|nil item
+function M.get_current_hunk_patch()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then return nil, nil end
+
+  local ui_state = ui.get_state()
+  local raw_lines = ui_state.raw_diff_lines
+  if not raw_lines or #raw_lines == 0 then return nil, nil end
+
+  -- Parse raw diff lines into header + hunks
+  local header_lines = {}
+  local hunks = {}
+  local current_hunk = nil
+
+  for _, line in ipairs(raw_lines) do
+    if line:match("^diff ") or line:match("^index ") or line:match("^%-%-%- ") or line:match("^%+%+%+ ") or line:match("^new file") or line:match("^deleted file") then
+      table.insert(header_lines, line)
+    elseif line:match("^@@") then
+      if current_hunk then table.insert(hunks, current_hunk) end
+      current_hunk = { line }
+    elseif current_hunk then
+      table.insert(current_hunk, line)
+    end
+  end
+  if current_hunk then table.insert(hunks, current_hunk) end
+  if #hunks == 0 then return nil, nil end
+
+  -- Find which hunk based on cursor position in diff panel
+  local target_hunk = hunks[1]
+  if ui_state.diff_win and vim.api.nvim_win_is_valid(ui_state.diff_win) then
+    local cursor_line = vim.api.nvim_win_get_cursor(ui_state.diff_win)[1]
+    local hunk_idx = ui_state.display_to_hunk_idx[cursor_line]
+    if hunk_idx and hunks[hunk_idx] then
+      target_hunk = hunks[hunk_idx]
+    end
+  end
+
+  local patch_lines = vim.list_extend({}, header_lines)
+  vim.list_extend(patch_lines, target_hunk)
+  return table.concat(patch_lines, "\n") .. "\n", item
+end
+
+function M.stage_hunk()
+  local patch, item = M.get_current_hunk_patch()
+  if not patch or not item then
+    vim.notify("No hunk to stage", vim.log.levels.WARN)
+    return
+  end
+  if item.section == "staged" then return end
+  git.stage_hunk(patch, function(ok, err)
+    if ok then
+      M.refresh()
+    else
+      vim.notify("Stage hunk failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.unstage_hunk()
+  local patch, item = M.get_current_hunk_patch()
+  if not patch or not item then
+    vim.notify("No hunk to unstage", vim.log.levels.WARN)
+    return
+  end
+  if item.section ~= "staged" then return end
+  git.unstage_hunk(patch, function(ok, err)
+    if ok then
+      M.refresh()
+    else
+      vim.notify("Unstage hunk failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+-- expose for init
+M.cursor_to_first_file = cursor_to_first_file
+
+return M
