@@ -50,37 +50,39 @@ function M.render()
   local highlights = {}
   local line_map = {}
   local icons = config.options.icons
+  local width = config.options.layout.status_width
 
-  -- Header: branch info
+  -- Top padding
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  -- Branch header
   local branch = state.branch
   local branch_line = string.format("  %s %s", icons.branch, branch.name)
   if branch.ahead > 0 or branch.behind > 0 then
     branch_line = branch_line .. string.format("  ↑%d ↓%d", branch.ahead, branch.behind)
   end
-  table.insert(lines, "")
-  line_map[#lines] = { type = "blank" }
   table.insert(lines, branch_line)
   table.insert(highlights, { group = "GitUIBranch", line = #lines - 1 })
   line_map[#lines] = { type = "header" }
+
   table.insert(lines, "")
   line_map[#lines] = { type = "blank" }
 
   local total_files = #state.files.staged + #state.files.changed + #state.files.untracked
-  local is_clean = total_files == 0
 
-  if is_clean then
-    table.insert(lines, "  Working tree clean ✓")
+  if total_files == 0 then
+    table.insert(lines, "  Working tree clean")
     table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
     line_map[#lines] = { type = "info" }
     table.insert(lines, "")
     line_map[#lines] = { type = "blank" }
   else
-    -- Sections
     local section_order = { "staged", "changed", "untracked" }
-    local section_names = {
-      staged = "Staged Changes",
-      changed = "Changes",
-      untracked = "Untracked",
+    local section_labels = {
+      staged = "STAGED",
+      changed = "CHANGES",
+      untracked = "UNTRACKED",
     }
 
     for _, section in ipairs(section_order) do
@@ -88,21 +90,80 @@ function M.render()
       if #files > 0 then
         local sec = state.sections[section]
         local icon = sec.collapsed and icons.section_closed or icons.section_open
-        local header = string.format("  %s %s (%d)", icon, section_names[section], #files)
-        table.insert(lines, header)
-        table.insert(highlights, { group = "GitUISectionHeader", line = #lines - 1 })
+        local label = section_labels[section]
+        local count_str = tostring(#files)
+
+        -- "  ▼ STAGED                         3"
+        local prefix = string.format("  %s %s", icon, label)
+        local padding = math.max(1, width - #prefix - #count_str - 1)
+        local header_line = prefix .. string.rep(" ", padding) .. count_str
+
+        table.insert(lines, header_line)
         line_map[#lines] = { type = "section", section = section }
+        table.insert(highlights, {
+          group = "GitUISectionHeader",
+          line = #lines - 1,
+          col_start = 0,
+          col_end = #prefix,
+        })
+        table.insert(highlights, {
+          group = "GitUISectionCount",
+          line = #lines - 1,
+          col_start = #header_line - #count_str,
+          col_end = #header_line,
+        })
 
         if not sec.collapsed then
           for i, file in ipairs(files) do
-            local status_icon = section == "staged" and icons.staged or get_status_icon(file.status)
-            local display = string.format("    %s  %s", status_icon, file.path)
-            table.insert(lines, display)
+            local si = section == "staged" and icons.staged or get_status_icon(file.status)
+
+            -- Split path: dim directory, bright filename
+            local dir, fname = file.path:match("^(.+/)([^/]+)$")
+            if not dir then fname = file.path end
+
+            local file_line
+            if dir then
+              file_line = string.format("    %s %s%s", si, dir, fname)
+            else
+              file_line = string.format("    %s %s", si, fname)
+            end
+
+            table.insert(lines, file_line)
+            line_map[#lines] = { type = "file", section = section, index = i, file = file }
+
+            -- Icon highlight
+            local icon_start = 4
+            local icon_end = icon_start + #si
             table.insert(highlights, {
               group = get_status_hl(file.status, section),
               line = #lines - 1,
+              col_start = icon_start,
+              col_end = icon_end,
             })
-            line_map[#lines] = { type = "file", section = section, index = i, file = file }
+
+            -- Path: dim directory, bright filename
+            local path_start = icon_end + 1
+            if dir then
+              table.insert(highlights, {
+                group = "GitUIFilePath",
+                line = #lines - 1,
+                col_start = path_start,
+                col_end = path_start + #dir,
+              })
+              table.insert(highlights, {
+                group = "GitUIFileName",
+                line = #lines - 1,
+                col_start = path_start + #dir,
+                col_end = -1,
+              })
+            else
+              table.insert(highlights, {
+                group = "GitUIFileName",
+                line = #lines - 1,
+                col_start = path_start,
+                col_end = -1,
+              })
+            end
           end
         end
 
@@ -113,23 +174,56 @@ function M.render()
   end
 
   -- Separator
-  local sep = "  " .. string.rep("─", config.options.layout.status_width - 4)
-  table.insert(lines, sep)
+  table.insert(lines, "  " .. string.rep("─", width - 4))
   table.insert(highlights, { group = "GitUISeparator", line = #lines - 1 })
   line_map[#lines] = { type = "separator" }
 
-  -- Help footer
-  local help = {
-    "  s stage     u unstage   c commit",
-    "  S stage all U unstage all        ",
-    "  P push      L pull      b branch",
-    "  n new branch  r refresh  q quit ",
-    "  Tab diff  ]c next change [c prev",
+  -- Help footer with key highlighting
+  local help_rows = {
+    { { "s", "stage" },     { "u", "unstage" },    { "c", "commit" } },
+    { { "S", "stage all" }, { "U", "unstage all" }, { "P", "push" } },
+    { { "L", "pull" },      { "b", "branch" },     { "n", "new" } },
+    { { "r", "refresh" },   { "Tab", "diff" },     { "q", "quit" } },
+    { { "]c", "next" },     { "[c", "prev" },      { "Esc", "close" } },
   }
-  for _, h in ipairs(help) do
-    table.insert(lines, h)
-    table.insert(highlights, { group = "GitUIHelpText", line = #lines - 1 })
+
+  local cell_w = math.floor((width - 3) / 3)
+  for _, row in ipairs(help_rows) do
+    local line_str = "   "
+    local key_ranges = {}
+    local desc_ranges = {}
+    local col = 3
+
+    for _, item in ipairs(row) do
+      local key, desc = item[1], item[2]
+      local cell = key .. " " .. desc
+      local pad = math.max(0, cell_w - #cell)
+      line_str = line_str .. cell .. string.rep(" ", pad)
+
+      table.insert(key_ranges, { s = col, e = col + #key })
+      table.insert(desc_ranges, { s = col + #key + 1, e = col + #key + 1 + #desc })
+      col = col + cell_w
+    end
+
+    table.insert(lines, line_str)
     line_map[#lines] = { type = "help" }
+
+    for _, kr in ipairs(key_ranges) do
+      table.insert(highlights, {
+        group = "GitUIHelpKey",
+        line = #lines - 1,
+        col_start = kr.s,
+        col_end = kr.e,
+      })
+    end
+    for _, dr in ipairs(desc_ranges) do
+      table.insert(highlights, {
+        group = "GitUIHelpText",
+        line = #lines - 1,
+        col_start = dr.s,
+        col_end = dr.e,
+      })
+    end
   end
 
   state.line_map = line_map
@@ -140,8 +234,10 @@ end
 local function cursor_to_first_file()
   local ui_state = ui.get_state()
   if not ui_state.status_win or not vim.api.nvim_win_is_valid(ui_state.status_win) then return end
-  for line_nr, item in pairs(state.line_map) do
-    if item.type == "file" then
+  if not ui_state.status_buf or not vim.api.nvim_buf_is_valid(ui_state.status_buf) then return end
+  local total = vim.api.nvim_buf_line_count(ui_state.status_buf)
+  for line_nr = 1, total do
+    if state.line_map[line_nr] and state.line_map[line_nr].type == "file" then
       pcall(vim.api.nvim_win_set_cursor, ui_state.status_win, { line_nr, 0 })
       return
     end
@@ -192,11 +288,14 @@ function M.update_diff_for_cursor()
   local item = M.get_item_at_cursor()
   if not item or item.type ~= "file" then
     ui.set_diff_lines({ "", "  Select a file to preview its diff" })
+    ui.set_diff_statusline(nil)
     return
   end
 
   local file = item.file
   local staged = item.section == "staged"
+
+  ui.set_diff_statusline(file.path)
 
   local function show_diff(diff_text)
     if not diff_text or diff_text == "" then

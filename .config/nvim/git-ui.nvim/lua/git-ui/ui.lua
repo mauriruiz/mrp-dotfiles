@@ -1,6 +1,7 @@
 local M = {}
 
 local ns_diff = vim.api.nvim_create_namespace("git-ui-diff")
+local ns_status = vim.api.nvim_create_namespace("git-ui-status")
 local ns_scrollbar = vim.api.nvim_create_namespace("git-ui-scrollbar")
 
 local state = {
@@ -107,6 +108,7 @@ function M.open(status_width)
     spell = false,
     list = false,
     statusline = " %#GitUIBranch# Git %#Normal#",
+    winhighlight = "Normal:GitUIStatusBg,CursorLine:GitUIStatusCursorLine",
   }
   for k, v in pairs(status_opts) do
     vim.wo[state.status_win][k] = v
@@ -191,12 +193,12 @@ function M.set_status_lines(lines, highlights)
   if not buf_valid(state.status_buf) then return end
   vim.bo[state.status_buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.status_buf, 0, -1, false, lines)
-  vim.api.nvim_buf_clear_namespace(state.status_buf, -1, 0, -1)
+  vim.api.nvim_buf_clear_namespace(state.status_buf, ns_status, 0, -1)
   if highlights then
     for _, hl in ipairs(highlights) do
       vim.api.nvim_buf_add_highlight(
         state.status_buf,
-        -1,
+        ns_status,
         hl.group,
         hl.line,
         hl.col_start or 0,
@@ -205,6 +207,16 @@ function M.set_status_lines(lines, highlights)
     end
   end
   vim.bo[state.status_buf].modifiable = false
+end
+
+function M.set_diff_statusline(filepath)
+  if not win_valid(state.diff_win) then return end
+  if filepath then
+    local safe = filepath:gsub("%%", "%%%%")
+    vim.wo[state.diff_win].statusline = " %#GitUIDiffFile# " .. safe .. " %#Normal#"
+  else
+    vim.wo[state.diff_win].statusline = " %#GitUIHelpText# Diff Preview %#Normal#"
+  end
 end
 
 ---------------------------------------------------------------------------
