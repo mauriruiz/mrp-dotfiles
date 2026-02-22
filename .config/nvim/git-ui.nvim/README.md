@@ -1,6 +1,6 @@
 # git-ui.nvim
 
-A VSCode-like Git UI for Neovim. Stage, diff, commit, push, pull and switch branches without leaving your editor.
+A VSCode-like Git UI for Neovim. Stage, discard, diff, commit, push, pull and switch branches without leaving your editor.
 
 ## Open / Close
 
@@ -35,6 +35,7 @@ Use `gt` / `gT` to switch between the Git UI tab and your code tabs.
 | `j` / `k` | Navigate files (diff updates live) |
 | `s` | Stage file |
 | `u` | Unstage file |
+| `d` | Discard file changes (or delete untracked file) |
 | `S` | Stage all |
 | `U` | Unstage all |
 | `c` | Commit (prompts for message) |

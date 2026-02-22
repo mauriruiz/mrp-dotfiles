@@ -5,6 +5,7 @@ M.defaults = {
     open = "<leader>gg",
     stage = "s",
     unstage = "u",
+    discard = "d",
     stage_hunk = "hs",
     unstage_hunk = "hu",
     commit = "c",

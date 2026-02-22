@@ -30,6 +30,7 @@ local function setup_keymaps()
 
   map(km.stage, panel.stage_file, "Stage file")
   map(km.unstage, panel.unstage_file, "Unstage file")
+  map(km.discard, panel.discard_file, "Discard file changes")
   map(km.stage_hunk, panel.stage_hunk, "Stage hunk")
   map(km.unstage_hunk, panel.unstage_hunk, "Unstage hunk")
   map(km.commit, panel.do_commit, "Commit")

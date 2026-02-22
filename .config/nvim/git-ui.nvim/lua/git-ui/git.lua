@@ -138,6 +138,19 @@ function M.unstage(path, callback)
   end)
 end
 
+function M.discard(path, untracked, callback)
+  local args
+  if untracked then
+    args = { "clean", "-f", "--", path }
+  else
+    args = { "restore", "--worktree", "--", path }
+  end
+
+  run(args, function(ok, _, stderr)
+    callback(ok, stderr)
+  end)
+end
+
 function M.stage_all(callback)
   run({ "add", "-A" }, function(ok, _, stderr)
     callback(ok, stderr)

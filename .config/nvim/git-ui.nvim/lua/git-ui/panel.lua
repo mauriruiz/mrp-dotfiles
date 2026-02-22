@@ -180,11 +180,11 @@ function M.render()
 
   -- Help footer with key highlighting
   local help_rows = {
-    { { "s", "stage" },     { "u", "unstage" },    { "c", "commit" } },
-    { { "S", "stage all" }, { "U", "unstage all" }, { "P", "push" } },
-    { { "L", "pull" },      { "b", "branch" },     { "n", "new" } },
-    { { "r", "refresh" },   { "Tab", "diff" },     { "q", "quit" } },
-    { { "]c", "next" },     { "[c", "prev" },      { "Esc", "close" } },
+    { { "s", "stage" },   { "u", "unstage" },   { "d", "discard" } },
+    { { "c", "commit" },  { "S", "stage all" }, { "U", "unstage all" } },
+    { { "P", "push" },    { "L", "pull" },      { "b", "branch" } },
+    { { "n", "new" },     { "r", "refresh" },   { "Tab", "diff" } },
+    { { "]c", "next" },   { "[c", "prev" },     { "q/Esc", "close" } },
   }
 
   local cell_w = math.floor((width - 3) / 3)
@@ -339,6 +339,35 @@ function M.unstage_file()
       M.refresh()
     else
       vim.notify("Unstage failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.discard_file()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then return end
+
+  if item.section == "staged" then
+    vim.notify("Unstage file before discarding changes", vim.log.levels.WARN)
+    return
+  end
+
+  local path = item.file.actual_path
+  local prompt
+  if item.section == "untracked" then
+    prompt = "Delete untracked file '" .. path .. "'?"
+  else
+    prompt = "Discard changes in '" .. path .. "'?"
+  end
+
+  if vim.fn.confirm(prompt, "&No\n&Yes", 1) ~= 2 then return end
+
+  git.discard(path, item.section == "untracked", function(ok, err)
+    if ok then
+      vim.notify("Discarded: " .. path, vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Discard failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
