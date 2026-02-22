@@ -67,7 +67,9 @@ return {
       -- Keymaps
       vim.keymap.set("n", "K", vim.lsp.buf.hover)
       vim.keymap.set("n", "gd", vim.lsp.buf.definition)
-      vim.keymap.set("n", "gr", vim.lsp.buf.references, { desc = "Go to references (usages)" })
+      vim.keymap.set("n", "gr", function()
+        require("telescope.builtin").lsp_references()
+      end, { desc = "Go to references (Telescope)" })
       vim.keymap.set({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action)
       vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float)
     end,
