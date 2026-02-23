@@ -223,7 +223,8 @@ end
 -- Diff rendering
 ---------------------------------------------------------------------------
 
-function M.set_diff_lines(lines)
+function M.set_diff_lines(lines, opts)
+  opts = opts or {}
   if not buf_valid(state.diff_buf) then return end
 
   -- Store raw diff lines for hunk operations in panel.lua
@@ -238,59 +239,94 @@ function M.set_diff_lines(lines)
   -- Process raw diff lines: strip prefixes so treesitter can parse as real code
   local display = {}
   local line_types = {}
-  local hunk_idx = 0
-  local is_first_hunk = true
-
-  for _, line in ipairs(lines) do
-    if line:match("^diff ") or line:match("^index ") or line:match("^%-%-%- ") or line:match("^%+%+%+ ") or line:match("^new file") or line:match("^deleted file") then
-      -- skip metadata headers
-    elseif line:match("^@@") then
-      hunk_idx = hunk_idx + 1
-      if not is_first_hunk then
-        table.insert(display, "")
-        table.insert(line_types, "blank")
-        state.display_to_hunk_idx[#display] = hunk_idx
-        table.insert(display, string.rep("╌", 60))
-        table.insert(line_types, "separator")
-        state.display_to_hunk_idx[#display] = hunk_idx
-        table.insert(display, "")
-        table.insert(line_types, "blank")
-        state.display_to_hunk_idx[#display] = hunk_idx
-      end
-      is_first_hunk = false
-    elseif hunk_idx > 0 then
-      local first = line:sub(1, 1)
-      if first == "+" then
-        table.insert(display, line:sub(2))
-        table.insert(line_types, "add")
-      elseif first == "-" then
-        table.insert(display, line:sub(2))
-        table.insert(line_types, "del")
-      elseif first == " " then
-        table.insert(display, line:sub(2))
-        table.insert(line_types, "context")
-      else
-        table.insert(display, line)
-        table.insert(line_types, "context")
-      end
-      state.display_to_hunk_idx[#display] = hunk_idx
-    end
-  end
-
-  -- Fallback for non-diff content (placeholder messages)
-  if #display == 0 and #lines > 0 then
+  if opts.conflict then
     display = lines
+    local hint_lines = opts.hint_lines or 0
+    local block = nil -- "ours" | "theirs"
+    for i, line in ipairs(display) do
+      if i <= hint_lines then
+        line_types[i] = "hint"
+      elseif line:match("^<<<<<<<") then
+        line_types[i] = "conflict_marker"
+        block = "ours"
+      elseif line:match("^=======$") then
+        line_types[i] = "conflict_separator"
+        block = "theirs"
+      elseif line:match("^>>>>>>>") then
+        line_types[i] = "conflict_marker"
+        block = nil
+      elseif block == "ours" then
+        line_types[i] = "conflict_ours"
+      elseif block == "theirs" then
+        line_types[i] = "conflict_theirs"
+      else
+        line_types[i] = "context"
+      end
+    end
+
+  else
+    local hunk_idx = 0
+    local is_first_hunk = true
+
+    for _, line in ipairs(lines) do
+      if line:match("^diff ")
+        or line:match("^index ")
+        or line:match("^%-%-%- ")
+        or line:match("^%+%+%+ ")
+        or line:match("^new file")
+        or line:match("^deleted file")
+      then
+        -- skip metadata headers
+      elseif line:match("^@@") then
+        hunk_idx = hunk_idx + 1
+        if not is_first_hunk then
+          table.insert(display, "")
+          table.insert(line_types, "blank")
+          state.display_to_hunk_idx[#display] = hunk_idx
+          table.insert(display, string.rep("╌", 60))
+          table.insert(line_types, "separator")
+          state.display_to_hunk_idx[#display] = hunk_idx
+          table.insert(display, "")
+          table.insert(line_types, "blank")
+          state.display_to_hunk_idx[#display] = hunk_idx
+        end
+        is_first_hunk = false
+      elseif hunk_idx > 0 then
+        local first = line:sub(1, 1)
+        if first == "+" then
+          table.insert(display, line:sub(2))
+          table.insert(line_types, "add")
+        elseif first == "-" then
+          table.insert(display, line:sub(2))
+          table.insert(line_types, "del")
+        elseif first == " " then
+          table.insert(display, line:sub(2))
+          table.insert(line_types, "context")
+        else
+          table.insert(display, line)
+          table.insert(line_types, "context")
+        end
+        state.display_to_hunk_idx[#display] = hunk_idx
+      end
+    end
+
+    -- Fallback for non-diff content (placeholder messages)
+    if #display == 0 and #lines > 0 then
+      display = lines
+    end
   end
 
   vim.api.nvim_buf_set_lines(state.diff_buf, 0, -1, false, display)
 
   -- Detect language from diff header and start native treesitter highlighting
-  local filepath = nil
-  for _, line in ipairs(lines) do
-    local match = line:match("^%+%+%+ b/(.+)$")
-    if match then
-      filepath = match
-      break
+  local filepath = opts.filepath
+  if not filepath then
+    for _, line in ipairs(lines) do
+      local match = line:match("^%+%+%+ b/(.+)$")
+      if match then
+        filepath = match
+        break
+      end
     end
   end
   if filepath then
@@ -328,6 +364,35 @@ function M.set_diff_lines(lines)
       vim.api.nvim_buf_set_extmark(state.diff_buf, ns_diff, i - 1, 0, {
         end_col = #display[i],
         hl_group = "GitUISeparator",
+        priority = 100,
+      })
+    elseif lt == "conflict_marker" or lt == "conflict_separator" then
+      vim.api.nvim_buf_set_extmark(state.diff_buf, ns_diff, i - 1, 0, {
+        line_hl_group = "GitUIConflictMarker",
+        sign_text = "▎",
+        sign_hl_group = "GitUIConflictMarkerSign",
+        priority = 12,
+      })
+      state.change_lines_set[i] = "conflict"
+      if display[i] and display[i]:match("^<<<<<<<") then
+        table.insert(state.change_starts, i)
+      end
+    elseif lt == "conflict_ours" then
+      vim.api.nvim_buf_set_extmark(state.diff_buf, ns_diff, i - 1, 0, {
+        line_hl_group = "GitUIConflictOurs",
+        priority = 11,
+      })
+      state.change_lines_set[i] = "conflict"
+    elseif lt == "conflict_theirs" then
+      vim.api.nvim_buf_set_extmark(state.diff_buf, ns_diff, i - 1, 0, {
+        line_hl_group = "GitUIConflictTheirs",
+        priority = 11,
+      })
+      state.change_lines_set[i] = "conflict"
+    elseif lt == "hint" then
+      vim.api.nvim_buf_set_extmark(state.diff_buf, ns_diff, i - 1, 0, {
+        end_col = #display[i],
+        hl_group = "GitUIConflictHint",
         priority = 100,
       })
     end
@@ -371,7 +436,7 @@ function M.update_scrollbar()
   local bot_line = vim.fn.line("w$", state.diff_win)
 
   -- Map each change to a scrollbar position
-  local sb_changes = {} -- sb_pos -> "add" | "del"
+  local sb_changes = {} -- sb_pos -> "add" | "del" | "conflict"
   for line_nr, change_type in pairs(state.change_lines_set) do
     local sb_pos = math.ceil(line_nr / total_lines * win_height)
     sb_pos = math.max(1, math.min(sb_pos, win_height))
@@ -399,6 +464,8 @@ function M.update_scrollbar()
       hl = in_vp and "GitUIScrollAddVP" or "GitUIScrollAdd"
     elseif change == "del" then
       hl = in_vp and "GitUIScrollDelVP" or "GitUIScrollDel"
+    elseif change == "conflict" then
+      hl = in_vp and "GitUIScrollConflictVP" or "GitUIScrollConflict"
     else
       hl = in_vp and "GitUIScrollVP" or "GitUIScrollTrack"
     end

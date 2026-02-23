@@ -5,9 +5,10 @@ local ui = require("git-ui.ui")
 local config = require("git-ui.config")
 
 local state = {
-  files = { staged = {}, changed = {}, untracked = {} },
+  files = { conflicted = {}, staged = {}, changed = {}, untracked = {} },
   branch = { name = "", ahead = 0, behind = 0 },
   sections = {
+    conflicted = { collapsed = false },
     staged = { collapsed = false },
     changed = { collapsed = false },
     untracked = { collapsed = false },
@@ -23,6 +24,13 @@ end
 local function get_status_icon(status)
   local icons = config.options.icons
   local map = {
+    UU = icons.conflict,
+    AA = icons.conflict,
+    DD = icons.conflict,
+    AU = icons.conflict,
+    UA = icons.conflict,
+    DU = icons.conflict,
+    UD = icons.conflict,
     M = icons.modified,
     A = icons.added,
     D = icons.deleted,
@@ -33,6 +41,7 @@ local function get_status_icon(status)
 end
 
 local function get_status_hl(status, section)
+  if section == "conflicted" then return "GitUIConflict" end
   if section == "staged" then return "GitUIStaged" end
   local map = {
     M = "GitUIModified",
@@ -69,7 +78,7 @@ function M.render()
   table.insert(lines, "")
   line_map[#lines] = { type = "blank" }
 
-  local total_files = #state.files.staged + #state.files.changed + #state.files.untracked
+  local total_files = #state.files.conflicted + #state.files.staged + #state.files.changed + #state.files.untracked
 
   if total_files == 0 then
     table.insert(lines, "  Working tree clean")
@@ -78,8 +87,9 @@ function M.render()
     table.insert(lines, "")
     line_map[#lines] = { type = "blank" }
   else
-    local section_order = { "staged", "changed", "untracked" }
+    local section_order = { "conflicted", "staged", "changed", "untracked" }
     local section_labels = {
+      conflicted = "CONFLICTS",
       staged = "STAGED",
       changed = "CHANGES",
       untracked = "UNTRACKED",
@@ -115,17 +125,29 @@ function M.render()
 
         if not sec.collapsed then
           for i, file in ipairs(files) do
-            local si = section == "staged" and icons.staged or get_status_icon(file.status)
+            local si
+            if section == "staged" then
+              si = icons.staged
+            elseif section == "conflicted" then
+              si = icons.conflict
+            else
+              si = get_status_icon(file.status)
+            end
 
             -- Split path: dim directory, bright filename
             local dir, fname = file.path:match("^(.+/)([^/]+)$")
             if not dir then fname = file.path end
 
+            local detail = ""
+            if section == "conflicted" then
+              detail = string.format("[%s] ", file.status)
+            end
+
             local file_line
             if dir then
-              file_line = string.format("    %s %s%s", si, dir, fname)
+              file_line = string.format("    %s %s%s%s", si, detail, dir, fname)
             else
-              file_line = string.format("    %s %s", si, fname)
+              file_line = string.format("    %s %s%s", si, detail, fname)
             end
 
             table.insert(lines, file_line)
@@ -141,8 +163,18 @@ function M.render()
               col_end = icon_end,
             })
 
+            local detail_start = icon_end + 1
+            local path_start = detail_start + #detail
+            if #detail > 0 then
+              table.insert(highlights, {
+                group = "GitUIConflict",
+                line = #lines - 1,
+                col_start = detail_start,
+                col_end = path_start,
+              })
+            end
+
             -- Path: dim directory, bright filename
-            local path_start = icon_end + 1
             if dir then
               table.insert(highlights, {
                 group = "GitUIFilePath",
@@ -181,6 +213,8 @@ function M.render()
   -- Help footer with key highlighting
   local help_rows = {
     { { "s", "stage" },   { "u", "unstage" },   { "d", "discard" } },
+    { { "o", "ours" },    { "i", "incoming" },  { "B", "both" } },
+    { { "m", "resolved" }, { "hs", "hunk+" },   { "hu", "hunk-" } },
     { { "c", "commit" },  { "S", "stage all" }, { "U", "unstage all" } },
     { { "P", "push" },    { "L", "pull" },      { "b", "branch" } },
     { { "n", "new" },     { "r", "refresh" },   { "Tab", "diff" } },
@@ -295,6 +329,42 @@ function M.update_diff_for_cursor()
   local file = item.file
   local staged = item.section == "staged"
 
+  if item.section == "conflicted" then
+    ui.set_diff_statusline(file.path .. " [CONFLICT]")
+    local km = config.options.keymaps
+    local hint = string.format(
+      "    [%s] ours   [%s] incoming   [%s] both   [%s] resolved",
+      km.resolve_ours,
+      km.resolve_theirs,
+      km.resolve_both,
+      km.mark_resolved
+    )
+
+    git.read_file(file.actual_path, function(ok, lines, err)
+      if not ok then
+        ui.set_diff_lines({ "", "  Failed to read file: " .. err })
+        return
+      end
+
+      local preview = {
+        "  Resolve this conflict with one keystroke:",
+        hint,
+        "",
+      }
+      if #lines == 0 then
+        table.insert(preview, "  File is empty")
+      else
+        vim.list_extend(preview, lines)
+      end
+      ui.set_diff_lines(preview, {
+        conflict = true,
+        filepath = file.actual_path,
+        hint_lines = 3,
+      })
+    end)
+    return
+  end
+
   ui.set_diff_statusline(file.path)
 
   local function show_diff(diff_text)
@@ -351,6 +421,10 @@ function M.discard_file()
     vim.notify("Unstage file before discarding changes", vim.log.levels.WARN)
     return
   end
+  if item.section == "conflicted" then
+    vim.notify("Use conflict resolve actions (o/i/B/m) for conflicted files", vim.log.levels.WARN)
+    return
+  end
 
   local path = item.file.actual_path
   local prompt
@@ -368,6 +442,66 @@ function M.discard_file()
       M.refresh()
     else
       vim.notify("Discard failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+local function get_conflicted_item()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "file" then return nil end
+  if item.section ~= "conflicted" then return nil end
+  return item
+end
+
+local function resolve_conflict(strategy, success_msg)
+  local item = get_conflicted_item()
+  if not item then return end
+
+  local path = item.file.actual_path
+  git.resolve_conflict(path, strategy, function(ok, err)
+    if ok then
+      vim.notify(success_msg .. ": " .. path, vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.resolve_conflict_ours()
+  resolve_conflict("ours", "Accepted current changes")
+end
+
+function M.resolve_conflict_theirs()
+  resolve_conflict("theirs", "Accepted incoming changes")
+end
+
+function M.resolve_conflict_both()
+  local item = get_conflicted_item()
+  if not item then return end
+
+  local path = item.file.actual_path
+  git.resolve_conflict_both(path, function(ok, err)
+    if ok then
+      vim.notify("Accepted both changes: " .. path, vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Resolve both failed: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+function M.mark_conflict_resolved()
+  local item = get_conflicted_item()
+  if not item then return end
+
+  local path = item.file.actual_path
+  git.stage(path, function(ok, err)
+    if ok then
+      vim.notify("Marked resolved: " .. path, vim.log.levels.INFO)
+      M.refresh()
+    else
+      vim.notify("Mark resolved failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end

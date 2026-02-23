@@ -29,10 +29,10 @@ end
 function M.status(callback)
   run({ "status", "--porcelain=v1", "-uall" }, function(ok, stdout)
     if not ok then
-      callback({ staged = {}, changed = {}, untracked = {} })
+      callback({ staged = {}, changed = {}, untracked = {}, conflicted = {} })
       return
     end
-    local files = { staged = {}, changed = {}, untracked = {} }
+    local files = { staged = {}, changed = {}, untracked = {}, conflicted = {} }
     for line in stdout:gmatch("[^\n]+") do
       local x = line:sub(1, 1)
       local y = line:sub(2, 2)
@@ -44,17 +44,29 @@ function M.status(callback)
         actual_path = path:match(" -> (.+)$")
       end
 
-      -- Staged changes (index)
-      if x == "M" or x == "A" or x == "D" or x == "R" or x == "C" then
-        table.insert(files.staged, { path = path, actual_path = actual_path, status = x })
-      end
-      -- Working tree changes
-      if y == "M" or y == "D" then
-        table.insert(files.changed, { path = path, actual_path = actual_path, status = y })
-      end
+      local is_conflicted = x == "U"
+        or y == "U"
+        or (x == "A" and y == "A")
+        or (x == "D" and y == "D")
+
+      if is_conflicted then
+        table.insert(files.conflicted, {
+          path = path,
+          actual_path = actual_path,
+          status = x .. y,
+        })
       -- Untracked
-      if x == "?" and y == "?" then
+      elseif x == "?" and y == "?" then
         table.insert(files.untracked, { path = path, actual_path = actual_path, status = "?" })
+      else
+        -- Staged changes (index)
+        if x == "M" or x == "A" or x == "D" or x == "R" or x == "C" then
+          table.insert(files.staged, { path = path, actual_path = actual_path, status = x })
+        end
+        -- Working tree changes
+        if y == "M" or y == "D" then
+          table.insert(files.changed, { path = path, actual_path = actual_path, status = y })
+        end
       end
     end
     callback(files)
@@ -148,6 +160,106 @@ function M.discard(path, untracked, callback)
 
   run(args, function(ok, _, stderr)
     callback(ok, stderr)
+  end)
+end
+
+function M.read_file(path, callback)
+  local cwd = vim.fn.getcwd()
+  local full_path = cwd .. "/" .. path
+  local ok_read, lines_or_err = pcall(vim.fn.readfile, full_path)
+  if not ok_read then
+    callback(false, {}, tostring(lines_or_err))
+    return
+  end
+  callback(true, lines_or_err, "")
+end
+
+function M.resolve_conflict(path, strategy, callback)
+  local mode
+  if strategy == "ours" then
+    mode = "--ours"
+  elseif strategy == "theirs" then
+    mode = "--theirs"
+  else
+    callback(false, "Invalid conflict strategy: " .. tostring(strategy))
+    return
+  end
+
+  run({ "checkout", mode, "--", path }, function(ok, _, stderr)
+    callback(ok, stderr)
+  end)
+end
+
+function M.resolve_conflict_both(path, callback)
+  M.read_file(path, function(ok, lines, err)
+    if not ok then
+      callback(false, err)
+      return
+    end
+
+    local out = {}
+    local i = 1
+    local found = false
+
+    while i <= #lines do
+      local line = lines[i]
+      if line:match("^<<<<<<<") then
+        found = true
+        i = i + 1
+
+        local ours = {}
+        while i <= #lines and not lines[i]:match("^=======$") do
+          -- Skip diff3 base section: ||||||| ... (until =======)
+          if lines[i]:match("^|||||||") then
+            i = i + 1
+            while i <= #lines and not lines[i]:match("^=======$") do
+              i = i + 1
+            end
+            break
+          end
+          table.insert(ours, lines[i])
+          i = i + 1
+        end
+        if i > #lines then
+          callback(false, "Malformed conflict markers")
+          return
+        end
+
+        i = i + 1
+        local theirs = {}
+        while i <= #lines and not lines[i]:match("^>>>>>>>") do
+          table.insert(theirs, lines[i])
+          i = i + 1
+        end
+        if i > #lines then
+          callback(false, "Malformed conflict markers")
+          return
+        end
+
+        i = i + 1 -- skip >>>>>>>
+
+        vim.list_extend(out, ours)
+        vim.list_extend(out, theirs)
+      else
+        table.insert(out, line)
+        i = i + 1
+      end
+    end
+
+    if not found then
+      callback(false, "No conflict markers found")
+      return
+    end
+
+    local cwd = vim.fn.getcwd()
+    local full_path = cwd .. "/" .. path
+    local ok_write, write_err = pcall(vim.fn.writefile, out, full_path)
+    if not ok_write then
+      callback(false, tostring(write_err))
+      return
+    end
+
+    callback(true, "")
   end)
 end
 

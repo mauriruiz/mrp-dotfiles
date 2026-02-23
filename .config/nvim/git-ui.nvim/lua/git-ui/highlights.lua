@@ -13,6 +13,7 @@ function M.setup()
   hl(0, "GitUIUntracked", { fg = "#94e2d5" })
   hl(0, "GitUIDeleted", { fg = "#f38ba8", bold = true })
   hl(0, "GitUIRenamed", { fg = "#89b4fa" })
+  hl(0, "GitUIConflict", { fg = "#fab387", bold = true })
 
   -- Branch and headers
   hl(0, "GitUIBranch", { fg = "#cba6f7", bold = true })
@@ -36,6 +37,11 @@ function M.setup()
   hl(0, "GitUIDiffHeader", { fg = "#89b4fa", bold = true })
   hl(0, "GitUIDiffFile", { fg = "#cdd6f4", bold = true })
   hl(0, "GitUIDiffHunk", { fg = "#cba6f7" })
+  hl(0, "GitUIConflictMarker", { bg = "#3a2a12", fg = "#fab387", bold = true })
+  hl(0, "GitUIConflictMarkerSign", { fg = "#fab387" })
+  hl(0, "GitUIConflictOurs", { bg = "#1f2f2f" })
+  hl(0, "GitUIConflictTheirs", { bg = "#30212f" })
+  hl(0, "GitUIConflictHint", { fg = "#94e2d5" })
 
   -- Misc
   hl(0, "GitUIClean", { fg = "#a6adc8", italic = true })
@@ -48,6 +54,8 @@ function M.setup()
   hl(0, "GitUIScrollDel", { bg = "#331a2a" })
   hl(0, "GitUIScrollAddVP", { bg = "#2a5540" })
   hl(0, "GitUIScrollDelVP", { bg = "#552a40" })
+  hl(0, "GitUIScrollConflict", { bg = "#5a4120" })
+  hl(0, "GitUIScrollConflictVP", { bg = "#8a6430" })
 end
 
 return M

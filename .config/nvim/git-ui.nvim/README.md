@@ -1,6 +1,8 @@
 # git-ui.nvim
 
-A VSCode-like Git UI for Neovim. Stage, discard, diff, commit, push, pull and switch branches without leaving your editor.
+A VSCode-like Git UI for Neovim. Stage, discard, resolve conflicts, diff, commit, push, pull and switch branches without leaving your editor.
+
+Conflicted files are grouped in a dedicated `CONFLICTS` section and previewed with visual ours/incoming highlights plus one-key resolution actions.
 
 ## Open / Close
 
@@ -36,6 +38,10 @@ Use `gt` / `gT` to switch between the Git UI tab and your code tabs.
 | `s` | Stage file |
 | `u` | Unstage file |
 | `d` | Discard file changes (or delete untracked file) |
+| `o` | Accept current changes for selected conflicted file |
+| `i` | Accept incoming changes for selected conflicted file |
+| `B` | Accept both sides for selected conflicted file |
+| `m` | Mark selected conflicted file as resolved (`git add`) |
 | `S` | Stage all |
 | `U` | Unstage all |
 | `c` | Commit (prompts for message) |
@@ -54,6 +60,7 @@ Use `gt` / `gT` to switch between the Git UI tab and your code tabs.
 |-----|--------|
 | `]c` | Jump to next change block |
 | `[c` | Jump to previous change block |
+| `o` / `i` / `B` / `m` | Conflict actions in preview (ours / incoming / both / resolved) |
 | `hs` | Stage hunk under cursor |
 | `hu` | Unstage hunk under cursor |
 | `<Tab>` / `<Esc>` | Back to status panel |
