@@ -18,6 +18,11 @@ return {
       "go",
       "zig",
       "lua",
+      "c_sharp",
+
+      -- markdown
+      "markdown",
+      "markdown_inline",
     },
     highlight = {
       enable = true,

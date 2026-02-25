@@ -17,6 +17,8 @@ local state = {
   change_lines_set = {}, -- line_nr -> "add" | "del"
   raw_diff_lines = {},
   display_to_hunk_idx = {},
+  display_to_conflict_idx = {}, -- display_line_nr -> conflict_idx (1-based)
+  conflict_count = 0,
 }
 
 function M.get_state()
@@ -230,6 +232,8 @@ function M.set_diff_lines(lines, opts)
   -- Store raw diff lines for hunk operations in panel.lua
   state.raw_diff_lines = lines
   state.display_to_hunk_idx = {}
+  state.display_to_conflict_idx = {}
+  state.conflict_count = 0
 
   -- Stop any previous treesitter highlighting
   pcall(vim.treesitter.stop, state.diff_buf)
@@ -243,26 +247,34 @@ function M.set_diff_lines(lines, opts)
     display = lines
     local hint_lines = opts.hint_lines or 0
     local block = nil -- "ours" | "theirs"
+    local conflict_idx = 0
     for i, line in ipairs(display) do
       if i <= hint_lines then
         line_types[i] = "hint"
       elseif line:match("^<<<<<<<") then
+        conflict_idx = conflict_idx + 1
         line_types[i] = "conflict_marker"
         block = "ours"
+        state.display_to_conflict_idx[i] = conflict_idx
       elseif line:match("^=======$") then
         line_types[i] = "conflict_separator"
         block = "theirs"
+        state.display_to_conflict_idx[i] = conflict_idx
       elseif line:match("^>>>>>>>") then
         line_types[i] = "conflict_marker"
         block = nil
+        state.display_to_conflict_idx[i] = conflict_idx
       elseif block == "ours" then
         line_types[i] = "conflict_ours"
+        state.display_to_conflict_idx[i] = conflict_idx
       elseif block == "theirs" then
         line_types[i] = "conflict_theirs"
+        state.display_to_conflict_idx[i] = conflict_idx
       else
         line_types[i] = "context"
       end
     end
+    state.conflict_count = conflict_idx
 
   else
     local hunk_idx = 0

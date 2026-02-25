@@ -9,6 +9,7 @@ return {
     -- Backend
     opts.formatters_by_ft.rust = { "rustfmt" }
     opts.formatters_by_ft.go = { "gofmt" }
+    opts.formatters_by_ft.cs = { "csharpier" }
 
     -- Frontend / React
     opts.formatters_by_ft.javascript = { "prettier" }

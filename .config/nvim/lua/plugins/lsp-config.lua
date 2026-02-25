@@ -25,6 +25,12 @@ return {
 
           -- JSON
           "jsonls",
+
+          -- C#
+          "omnisharp",
+
+          -- Markdown
+          "marksman",
         },
       })
     end,
@@ -54,7 +60,13 @@ return {
         },
       }
 
+      -- C#
+      vim.lsp.config.omnisharp = {
+        cmd = { "omnisharp", "--languageserver", "--hostPID", tostring(vim.fn.getpid()) },
+      }
+
       -- Enable servers
+      vim.lsp.enable("omnisharp")
       vim.lsp.enable("lua_ls")
       vim.lsp.enable("gopls")
       vim.lsp.enable("rust_analyzer")
@@ -63,6 +75,7 @@ return {
       vim.lsp.enable("cssls")
       vim.lsp.enable("emmet_ls")
       vim.lsp.enable("jsonls")
+      vim.lsp.enable("marksman")
 
       -- Keymaps
       vim.keymap.set("n", "K", vim.lsp.buf.hover)

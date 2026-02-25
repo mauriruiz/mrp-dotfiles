@@ -263,6 +263,90 @@ function M.resolve_conflict_both(path, callback)
   end)
 end
 
+function M.resolve_single_conflict(path, conflict_idx, strategy, callback)
+  M.read_file(path, function(ok, lines, err)
+    if not ok then
+      callback(false, err)
+      return
+    end
+
+    local out = {}
+    local current_idx = 0
+    local i = 1
+
+    while i <= #lines do
+      local line = lines[i]
+      if line:match("^<<<<<<<") then
+        current_idx = current_idx + 1
+        if current_idx == conflict_idx then
+          -- Target conflict: apply strategy
+          i = i + 1 -- skip <<<<<<<
+
+          local ours = {}
+          while i <= #lines and not lines[i]:match("^=======$") do
+            if lines[i]:match("^|||||||") then
+              i = i + 1
+              while i <= #lines and not lines[i]:match("^=======$") do
+                i = i + 1
+              end
+              break
+            end
+            table.insert(ours, lines[i])
+            i = i + 1
+          end
+          if i > #lines then
+            callback(false, "Malformed conflict markers")
+            return
+          end
+
+          i = i + 1 -- skip =======
+          local theirs = {}
+          while i <= #lines and not lines[i]:match("^>>>>>>>") do
+            table.insert(theirs, lines[i])
+            i = i + 1
+          end
+          if i > #lines then
+            callback(false, "Malformed conflict markers")
+            return
+          end
+          i = i + 1 -- skip >>>>>>>
+
+          if strategy == "ours" then
+            vim.list_extend(out, ours)
+          elseif strategy == "theirs" then
+            vim.list_extend(out, theirs)
+          elseif strategy == "both" then
+            vim.list_extend(out, ours)
+            vim.list_extend(out, theirs)
+          end
+        else
+          -- Not the target conflict, keep markers intact
+          table.insert(out, line)
+          i = i + 1
+        end
+      else
+        table.insert(out, line)
+        i = i + 1
+      end
+    end
+
+    if current_idx < conflict_idx then
+      callback(false, "Conflict #" .. conflict_idx .. " not found")
+      return
+    end
+
+    local cwd = vim.fn.getcwd()
+    local full_path = cwd .. "/" .. path
+    local ok_write, write_err = pcall(vim.fn.writefile, out, full_path)
+    if not ok_write then
+      callback(false, tostring(write_err))
+      return
+    end
+
+    callback(true, "")
+  end)
+end
+
 function M.stage_all(callback)
   run({ "add", "-A" }, function(ok, _, stderr)
     callback(ok, stderr)

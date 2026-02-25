@@ -14,7 +14,7 @@ macos-window-shadow = false
 clipboard-read = "allow"
 clipboard-paste-protection = false
 
-font-family = "Victor Mono"
+font-family = "Fira Code"
 font-family-bold = "Monaspace Neon Var"
 font-family-italic = "Operator Mono SSm Lig"
 font-family-bold-italic = "Operator Mono SSm Lig"
@@ -35,5 +35,5 @@ font-feature = dlig
 font-feature = calt
 
 adjust-cell-width = 0
-adjust-cell-height = 20%
+adjust-cell-height = 10%
 

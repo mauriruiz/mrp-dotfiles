@@ -21,6 +21,8 @@ M.defaults = {
     close = "q",
     toggle_section = "<CR>",
     focus_diff = "<Tab>",
+    conflict_undo = "u",
+    conflict_redo = "<C-r>",
   },
   layout = {
     status_width = 42,

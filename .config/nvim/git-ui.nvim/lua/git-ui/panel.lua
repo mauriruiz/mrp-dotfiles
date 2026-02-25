@@ -15,6 +15,7 @@ local state = {
   },
   line_map = {},
   loading = false,
+  conflict_history = {}, -- { [path] = { undo = {lines, ...}, redo = {lines, ...} } }
 }
 
 function M.get_state()
@@ -214,7 +215,8 @@ function M.render()
   local help_rows = {
     { { "s", "stage" },   { "u", "unstage" },   { "d", "discard" } },
     { { "o", "ours" },    { "i", "incoming" },  { "B", "both" } },
-    { { "m", "resolved" }, { "hs", "hunk+" },   { "hu", "hunk-" } },
+    { { "m", "resolved" }, { "u", "undo" },      { "C-r", "redo" } },
+    { { "hs", "hunk+" },  { "hu", "hunk-" } },
     { { "c", "commit" },  { "S", "stage all" }, { "U", "unstage all" } },
     { { "P", "push" },    { "L", "pull" },      { "b", "branch" } },
     { { "n", "new" },     { "r", "refresh" },   { "Tab", "diff" } },
@@ -347,7 +349,7 @@ function M.update_diff_for_cursor()
       end
 
       local preview = {
-        "  Resolve this conflict with one keystroke:",
+        "  Tab into diff, navigate to a conflict, press o/i/B per block",
         hint,
         "",
       }
@@ -453,19 +455,67 @@ local function get_conflicted_item()
   return item
 end
 
+--- Save file content to undo stack before a per-conflict resolve.
+local function save_conflict_undo(path)
+  local cwd = vim.fn.getcwd()
+  local full_path = cwd .. "/" .. path
+  local ok, lines = pcall(vim.fn.readfile, full_path)
+  if not ok then return end
+  if not state.conflict_history[path] then
+    state.conflict_history[path] = { undo = {}, redo = {} }
+  end
+  local hist = state.conflict_history[path]
+  table.insert(hist.undo, lines)
+  hist.redo = {} -- new action clears redo
+end
+
+--- If the diff panel has focus and cursor is on a conflict block, return its index.
+---@return number|nil conflict_idx 1-based index of the conflict under cursor
+local function get_conflict_at_diff_cursor()
+  local ui_state = ui.get_state()
+  if not ui_state.diff_win or not vim.api.nvim_win_is_valid(ui_state.diff_win) then
+    return nil
+  end
+  if vim.api.nvim_get_current_win() ~= ui_state.diff_win then
+    return nil
+  end
+  local cursor_line = vim.api.nvim_win_get_cursor(ui_state.diff_win)[1]
+  return ui_state.display_to_conflict_idx and ui_state.display_to_conflict_idx[cursor_line] or nil
+end
+
 local function resolve_conflict(strategy, success_msg)
   local item = get_conflicted_item()
   if not item then return end
 
   local path = item.file.actual_path
-  git.resolve_conflict(path, strategy, function(ok, err)
-    if ok then
-      vim.notify(success_msg .. ": " .. path, vim.log.levels.INFO)
-      M.refresh()
-    else
-      vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
-    end
-  end)
+  local conflict_idx = get_conflict_at_diff_cursor()
+
+  if conflict_idx then
+    -- Per-conflict resolution from diff panel
+    save_conflict_undo(path)
+    git.resolve_single_conflict(path, conflict_idx, strategy, function(ok, err)
+      if ok then
+        local total = ui.get_state().conflict_count or 0
+        vim.notify(
+          string.format("%s (#%d/%d): %s", success_msg, conflict_idx, total, path),
+          vim.log.levels.INFO
+        )
+        M.refresh()
+      else
+        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+      end
+    end)
+  else
+    -- Whole-file resolution from status panel
+    git.resolve_conflict(path, strategy, function(ok, err)
+      if ok then
+        vim.notify(success_msg .. ": " .. path, vim.log.levels.INFO)
+        M.refresh()
+      else
+        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+      end
+    end)
+  end
 end
 
 function M.resolve_conflict_ours()
@@ -481,14 +531,34 @@ function M.resolve_conflict_both()
   if not item then return end
 
   local path = item.file.actual_path
-  git.resolve_conflict_both(path, function(ok, err)
-    if ok then
-      vim.notify("Accepted both changes: " .. path, vim.log.levels.INFO)
-      M.refresh()
-    else
-      vim.notify("Resolve both failed: " .. err, vim.log.levels.ERROR)
-    end
-  end)
+  local conflict_idx = get_conflict_at_diff_cursor()
+
+  if conflict_idx then
+    -- Per-conflict "both" from diff panel
+    save_conflict_undo(path)
+    git.resolve_single_conflict(path, conflict_idx, "both", function(ok, err)
+      if ok then
+        local total = ui.get_state().conflict_count or 0
+        vim.notify(
+          string.format("Accepted both changes (#%d/%d): %s", conflict_idx, total, path),
+          vim.log.levels.INFO
+        )
+        M.refresh()
+      else
+        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+      end
+    end)
+  else
+    -- Whole-file "both"
+    git.resolve_conflict_both(path, function(ok, err)
+      if ok then
+        vim.notify("Accepted both changes: " .. path, vim.log.levels.INFO)
+        M.refresh()
+      else
+        vim.notify("Resolve both failed: " .. err, vim.log.levels.ERROR)
+      end
+    end)
+  end
 end
 
 function M.mark_conflict_resolved()
@@ -504,6 +574,70 @@ function M.mark_conflict_resolved()
       vim.notify("Mark resolved failed: " .. err, vim.log.levels.ERROR)
     end
   end)
+end
+
+function M.undo_conflict()
+  local item = get_conflicted_item()
+  if not item then return end
+
+  local path = item.file.actual_path
+  local hist = state.conflict_history[path]
+  if not hist or #hist.undo == 0 then
+    vim.notify("Nothing to undo", vim.log.levels.WARN)
+    return
+  end
+
+  local cwd = vim.fn.getcwd()
+  local full_path = cwd .. "/" .. path
+
+  -- Save current state to redo
+  local ok, current = pcall(vim.fn.readfile, full_path)
+  if ok then
+    table.insert(hist.redo, current)
+  end
+
+  -- Restore previous state
+  local prev = table.remove(hist.undo)
+  local ok_w, err = pcall(vim.fn.writefile, prev, full_path)
+  if not ok_w then
+    vim.notify("Undo failed: " .. tostring(err), vim.log.levels.ERROR)
+    return
+  end
+
+  vim.notify("Undid conflict resolution", vim.log.levels.INFO)
+  M.refresh()
+end
+
+function M.redo_conflict()
+  local item = get_conflicted_item()
+  if not item then return end
+
+  local path = item.file.actual_path
+  local hist = state.conflict_history[path]
+  if not hist or #hist.redo == 0 then
+    vim.notify("Nothing to redo", vim.log.levels.WARN)
+    return
+  end
+
+  local cwd = vim.fn.getcwd()
+  local full_path = cwd .. "/" .. path
+
+  -- Save current state to undo
+  local ok, current = pcall(vim.fn.readfile, full_path)
+  if ok then
+    table.insert(hist.undo, current)
+  end
+
+  -- Apply redo state
+  local next_state = table.remove(hist.redo)
+  local ok_w, err = pcall(vim.fn.writefile, next_state, full_path)
+  if not ok_w then
+    vim.notify("Redo failed: " .. tostring(err), vim.log.levels.ERROR)
+    return
+  end
+
+  vim.notify("Redid conflict resolution", vim.log.levels.INFO)
+  M.refresh()
 end
 
 function M.toggle_section()

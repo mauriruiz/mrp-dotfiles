@@ -147,6 +147,13 @@ automatically-unhide-macos-hidden-apps = false
     # Instant Workspace Workflow
     cmd-alt-ctrl-w = 'exec-and-forget ~/.config/aerospace/open-work-layout.sh'
 
+# Float Ghostty so native macOS tabs (cmd+T, cmd+1/2/3) work without
+# AeroSpace treating each tab as a separate tiled window.
+# See: https://ghostty.org/docs/help/macos-tiling-wms
+[[on-window-detected]]
+if.app-id = 'com.mitchellh.ghostty'
+run = 'layout floating'
+
 # 'service' binding mode declaration.
 # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
 [mode.service.binding]
