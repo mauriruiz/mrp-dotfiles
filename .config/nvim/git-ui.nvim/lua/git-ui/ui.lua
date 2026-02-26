@@ -3,6 +3,7 @@ local M = {}
 local ns_diff = vim.api.nvim_create_namespace("git-ui-diff")
 local ns_status = vim.api.nvim_create_namespace("git-ui-status")
 local ns_scrollbar = vim.api.nvim_create_namespace("git-ui-scrollbar")
+local ns_ts = vim.api.nvim_create_namespace("git-ui-ts")
 
 local state = {
   status_buf = nil,
@@ -222,6 +223,67 @@ function M.set_diff_statusline(filepath)
 end
 
 ---------------------------------------------------------------------------
+-- Treesitter syntax highlighting for diff buffers
+---------------------------------------------------------------------------
+
+--- Parse valid source lines with treesitter (via a temp buffer) and apply
+--- token highlights to the display buffer. `line_map` maps 1-based source
+--- line indices to 1-based display line indices.
+local function apply_ts_highlights(buf, source_lines, line_map, lang, display_lines)
+  local tmp_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(tmp_buf, 0, -1, false, source_lines)
+
+  local ok, parser = pcall(vim.treesitter.get_parser, tmp_buf, lang)
+  if not ok or not parser then
+    vim.api.nvim_buf_delete(tmp_buf, { force = true })
+    return
+  end
+
+  local trees = parser:parse()
+  if not trees or not trees[1] then
+    vim.api.nvim_buf_delete(tmp_buf, { force = true })
+    return
+  end
+
+  local ok2, query = pcall(vim.treesitter.query.get, lang, "highlights")
+  if not ok2 or not query then
+    vim.api.nvim_buf_delete(tmp_buf, { force = true })
+    return
+  end
+
+  for id, node in query:iter_captures(trees[1]:root(), tmp_buf) do
+    local hl_group = "@" .. query.captures[id] .. "." .. lang
+    local sr, sc, er, ec = node:range()
+
+    if sr == er then
+      local disp_row = line_map[sr + 1]
+      if disp_row then
+        pcall(vim.api.nvim_buf_set_extmark, buf, ns_ts, disp_row - 1, sc, {
+          end_col = ec,
+          hl_group = hl_group,
+          priority = 100,
+        })
+      end
+    else
+      for row = sr, er do
+        local disp_row = line_map[row + 1]
+        if disp_row then
+          local c_start = (row == sr) and sc or 0
+          local c_end = (row == er) and ec or #(display_lines[disp_row] or "")
+          pcall(vim.api.nvim_buf_set_extmark, buf, ns_ts, disp_row - 1, c_start, {
+            end_col = c_end,
+            hl_group = hl_group,
+            priority = 100,
+          })
+        end
+      end
+    end
+  end
+
+  vim.api.nvim_buf_delete(tmp_buf, { force = true })
+end
+
+---------------------------------------------------------------------------
 -- Diff rendering
 ---------------------------------------------------------------------------
 
@@ -330,7 +392,7 @@ function M.set_diff_lines(lines, opts)
 
   vim.api.nvim_buf_set_lines(state.diff_buf, 0, -1, false, display)
 
-  -- Detect language from diff header and start native treesitter highlighting
+  -- Detect language from diff header for syntax highlighting
   local filepath = opts.filepath
   if not filepath then
     for _, line in ipairs(lines) do
@@ -341,15 +403,72 @@ function M.set_diff_lines(lines, opts)
       end
     end
   end
+
+  -- Clear previous extmarks
+  vim.api.nvim_buf_clear_namespace(state.diff_buf, ns_ts, 0, -1)
+  vim.api.nvim_buf_clear_namespace(state.diff_buf, ns_diff, 0, -1)
+
+  -- Syntax highlighting: set filetype for baseline vim regex syntax, then
+  -- enhance with treesitter highlights parsed from valid reconstructed source.
   if filepath then
     local ft = vim.filetype.match({ filename = filepath })
     if ft then
+      -- Set filetype — triggers vim regex syntax as baseline highlighting.
+      -- nvim-treesitter's FileType autocmd will also auto-start treesitter,
+      -- but it can't parse the invalid interleaved diff content, so we stop
+      -- it and restore vim regex syntax instead.
       vim.bo[state.diff_buf].filetype = ft
+
+      if opts.conflict then
+        -- Conflict content is mostly valid — keep treesitter on the buffer
+        local lang = vim.treesitter.language.get_lang(ft) or ft
+        pcall(vim.treesitter.start, state.diff_buf, lang)
+      else
+        -- Stop treesitter (can't handle interleaved add/del lines) and
+        -- re-enable vim regex syntax that treesitter.start disabled.
+        pcall(vim.treesitter.stop, state.diff_buf)
+        vim.bo[state.diff_buf].syntax = ft
+
+        -- Layer richer treesitter highlights on top by parsing valid source.
+        -- We reconstruct two versions: "new" (context + adds) and "old"
+        -- (context + dels), parse each, then map token highlights back.
+        pcall(function()
+          local lang = vim.treesitter.language.get_lang(ft) or ft
+
+          -- Build "new" version (context + additions)
+          local new_lines = {}
+          local new_to_display = {} -- new_line_idx -> display_line_idx
+          local has_dels = false
+          for i, lt in ipairs(line_types) do
+            if lt == "context" or lt == "add" then
+              table.insert(new_lines, display[i])
+              new_to_display[#new_lines] = i
+            elseif lt == "del" then
+              has_dels = true
+            end
+          end
+          if #new_lines > 0 then
+            apply_ts_highlights(state.diff_buf, new_lines, new_to_display, lang, display)
+          end
+
+          -- Build "old" version (context + deletions) for deleted lines
+          if has_dels then
+            local old_lines = {}
+            local old_to_display = {}
+            for i, lt in ipairs(line_types) do
+              if lt == "context" or lt == "del" then
+                table.insert(old_lines, display[i])
+                old_to_display[#old_lines] = i
+              end
+            end
+            if #old_lines > 0 then
+              apply_ts_highlights(state.diff_buf, old_lines, old_to_display, lang, display)
+            end
+          end
+        end)
+      end
     end
   end
-
-  -- Clear previous diff extmarks
-  vim.api.nvim_buf_clear_namespace(state.diff_buf, ns_diff, 0, -1)
 
   -- Track changes for scrollbar + jump navigation
   state.change_starts = {}

@@ -45,7 +45,28 @@ return {
         settings = {
           Lua = {
             diagnostics = { globals = { "vim" } },
+            semantic = { enable = true },
           },
+        },
+      }
+
+      -- Rust
+      vim.lsp.config.rust_analyzer = {
+        settings = {
+          ["rust-analyzer"] = {
+            semanticHighlighting = {
+              punctuation = { enable = true },
+              operator = { specialization = { enable = true } },
+            },
+          },
+        },
+      }
+
+      -- TypeScript — semantic tokens on by default, enable inlay hints
+      vim.lsp.config.ts_ls = {
+        settings = {
+          typescript = { suggest = { completeFunctionCalls = true } },
+          javascript = { suggest = { completeFunctionCalls = true } },
         },
       }
 
