@@ -13,7 +13,7 @@ return {
   {
     "iamcco/markdown-preview.nvim",
     ft = "markdown",
-    build = "cd app && npm install",
+    build = "cd app && npx --yes yarn install",
     keys = {
       { "<leader>mp", "<cmd>MarkdownPreviewToggle<cr>", desc = "Markdown Preview" },
     },
