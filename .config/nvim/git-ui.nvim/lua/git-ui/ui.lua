@@ -222,6 +222,36 @@ function M.set_diff_statusline(filepath)
   end
 end
 
+function M.resize_status(delta)
+  if not state.is_open then return end
+  local cfg = require("git-ui.config")
+  local editor_width = vim.o.columns
+  local editor_height = vim.o.lines - 2
+  local scrollbar_width = 2
+  local min_w = 20
+  local max_w = math.floor(editor_width * 0.6)
+  local cur_w = cfg.options.layout.status_width
+  local new_w = math.max(min_w, math.min(max_w, cur_w + delta))
+  if new_w == cur_w then return end
+  cfg.options.layout.status_width = new_w
+  local diff_w = math.max(1, editor_width - new_w - scrollbar_width)
+  if win_valid(state.status_win) then
+    pcall(vim.api.nvim_win_set_config, state.status_win, {
+      relative = "editor", row = 0, col = 0, width = new_w, height = editor_height,
+    })
+  end
+  if win_valid(state.diff_win) then
+    pcall(vim.api.nvim_win_set_config, state.diff_win, {
+      relative = "editor", row = 0, col = new_w, width = diff_w, height = editor_height,
+    })
+  end
+  if win_valid(state.scrollbar_win) then
+    pcall(vim.api.nvim_win_set_config, state.scrollbar_win, {
+      relative = "editor", row = 0, col = new_w + diff_w, width = scrollbar_width, height = editor_height,
+    })
+  end
+end
+
 ---------------------------------------------------------------------------
 -- Treesitter syntax highlighting for diff buffers
 ---------------------------------------------------------------------------

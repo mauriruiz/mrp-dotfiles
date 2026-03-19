@@ -59,6 +59,16 @@ local function setup_keymaps()
     end)
   end, "Unstage all")
 
+  -- Sidebar resize
+  map("<", function()
+    ui.resize_status(-3)
+    panel.render()
+  end, "Shrink sidebar")
+  map(">", function()
+    ui.resize_status(3)
+    panel.render()
+  end, "Grow sidebar")
+
   -- Tab to jump to diff panel
   map(km.focus_diff, function()
     ui.focus_diff()

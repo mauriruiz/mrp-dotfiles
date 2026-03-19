@@ -135,7 +135,7 @@ function M.render()
               si = get_status_icon(file.status)
             end
 
-            -- Split path: dim directory, bright filename
+            -- Split path into directory and filename
             local dir, fname = file.path:match("^(.+/)([^/]+)$")
             if not dir then fname = file.path end
 
@@ -144,17 +144,11 @@ function M.render()
               detail = string.format("[%s] ", file.status)
             end
 
-            local file_line
-            if dir then
-              file_line = string.format("    %s %s%s%s", si, detail, dir, fname)
-            else
-              file_line = string.format("    %s %s%s", si, detail, fname)
-            end
-
-            table.insert(lines, file_line)
+            -- Line 1: icon + detail + filename (always fully visible)
+            local line1 = string.format("    %s %s%s", si, detail, fname)
+            table.insert(lines, line1)
             line_map[#lines] = { type = "file", section = section, index = i, file = file }
 
-            -- Icon highlight
             local icon_start = 4
             local icon_end = icon_start + #si
             table.insert(highlights, {
@@ -165,35 +159,54 @@ function M.render()
             })
 
             local detail_start = icon_end + 1
-            local path_start = detail_start + #detail
+            local fname_start = detail_start + #detail
             if #detail > 0 then
               table.insert(highlights, {
                 group = "GitUIConflict",
                 line = #lines - 1,
                 col_start = detail_start,
-                col_end = path_start,
+                col_end = fname_start,
               })
             end
+            table.insert(highlights, {
+              group = "GitUIFileName",
+              line = #lines - 1,
+              col_start = fname_start,
+              col_end = -1,
+            })
 
-            -- Path: dim directory, bright filename
+            -- Line 2: directory path, dimmed and left-truncated to fit width
             if dir then
+              local dir_display = dir:sub(1, -2) -- strip trailing /
+              local prefix = "       "           -- 7 spaces aligns under filename
+              local max_w = math.max(4, width - #prefix)
+
+              if #dir_display > max_w then
+                -- Remove path components from the left until it fits
+                local parts = vim.split(dir_display, "/", { plain = true })
+                local truncated = false
+                for pi = 2, #parts do
+                  local candidate = "…/" .. table.concat(parts, "/", pi)
+                  if #candidate <= max_w then
+                    dir_display = candidate
+                    truncated = true
+                    break
+                  end
+                end
+                if not truncated then
+                  -- Hard truncate as last resort
+                  dir_display = "…" .. dir_display:sub(#dir_display - max_w + 2)
+                end
+              end
+
+              local line2 = prefix .. dir_display
+              table.insert(lines, line2)
+              -- Both lines map to same file item so cursor + actions work on either
+              line_map[#lines] = { type = "file", section = section, index = i, file = file }
               table.insert(highlights, {
                 group = "GitUIFilePath",
                 line = #lines - 1,
-                col_start = path_start,
-                col_end = path_start + #dir,
-              })
-              table.insert(highlights, {
-                group = "GitUIFileName",
-                line = #lines - 1,
-                col_start = path_start + #dir,
-                col_end = -1,
-              })
-            else
-              table.insert(highlights, {
-                group = "GitUIFileName",
-                line = #lines - 1,
-                col_start = path_start,
+                col_start = 0,
                 col_end = -1,
               })
             end
@@ -221,6 +234,7 @@ function M.render()
     { { "P", "push" },    { "L", "pull" },      { "b", "branch" } },
     { { "n", "new" },     { "r", "refresh" },   { "Tab", "diff" } },
     { { "]c", "next" },   { "[c", "prev" },     { "q/Esc", "close" } },
+    { { "<", "shrink" },  { ">", "grow" } },
   }
 
   local cell_w = math.floor((width - 3) / 3)
