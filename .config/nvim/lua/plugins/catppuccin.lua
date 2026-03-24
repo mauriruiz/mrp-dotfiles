@@ -25,6 +25,5 @@ return {
         barbar = true,
       },
     })
-    vim.cmd.colorscheme("catppuccin")
   end,
 }

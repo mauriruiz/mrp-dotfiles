@@ -1,4 +1,4 @@
-theme = Catppuccin Mocha 
+theme = Monokai Pro
  
 confirm-close-surface = false
 mouse-hide-while-typing = true
