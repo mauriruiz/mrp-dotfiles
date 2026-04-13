@@ -330,16 +330,45 @@ local ns_diffbar = vim.api.nvim_create_namespace("git-ui-diffbar")
 function M.set_diff_statusline(filepath)
   if not buf_valid(state.diffbar_buf) then return end
   vim.bo[state.diffbar_buf].modifiable = true
-  local text
-  if filepath then
-    text = "  " .. filepath
-  else
-    text = "  Diff Preview"
-  end
-  vim.api.nvim_buf_set_lines(state.diffbar_buf, 0, -1, false, { text })
   vim.api.nvim_buf_clear_namespace(state.diffbar_buf, ns_diffbar, 0, -1)
-  local hl = filepath and "GitUIDiffFile" or "GitUIHelpText"
-  vim.api.nvim_buf_add_highlight(state.diffbar_buf, ns_diffbar, hl, 0, 0, -1)
+
+  if filepath then
+    -- Split into dir/ and filename
+    local dir, fname = filepath:match("^(.+/)([^/]+)$")
+    if not dir then fname = filepath end
+
+    local sep = "─"
+    local icon = "  "
+    local text = sep .. icon
+    local hls = {}
+
+    -- separator tick
+    table.insert(hls, { "GitUIDiffBarSep", 0, 0, #sep })
+    -- icon
+    table.insert(hls, { "GitUIDiffBarIcon", 0, #sep, #sep + #icon })
+
+    if dir then
+      text = text .. dir .. fname
+      local dir_start = #sep + #icon
+      table.insert(hls, { "GitUIDiffBarDir", 0, dir_start, dir_start + #dir })
+      table.insert(hls, { "GitUIDiffBarFile", 0, dir_start + #dir, dir_start + #dir + #fname })
+    else
+      text = text .. fname
+      local fname_start = #sep + #icon
+      table.insert(hls, { "GitUIDiffBarFile", 0, fname_start, fname_start + #fname })
+    end
+
+    vim.api.nvim_buf_set_lines(state.diffbar_buf, 0, -1, false, { text })
+    for _, h in ipairs(hls) do
+      vim.api.nvim_buf_add_highlight(state.diffbar_buf, ns_diffbar, h[1], h[2], h[3], h[4])
+    end
+  else
+    local text = "─  Diff Preview"
+    vim.api.nvim_buf_set_lines(state.diffbar_buf, 0, -1, false, { text })
+    vim.api.nvim_buf_add_highlight(state.diffbar_buf, ns_diffbar, "GitUIDiffBarSep", 0, 0, 3)
+    vim.api.nvim_buf_add_highlight(state.diffbar_buf, ns_diffbar, "GitUIDiffBarHint", 0, 3, -1)
+  end
+
   vim.bo[state.diffbar_buf].modifiable = false
 end
 

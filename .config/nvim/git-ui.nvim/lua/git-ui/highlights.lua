@@ -47,6 +47,13 @@ function M.setup()
   hl(0, "GitUIClean", { fg = "#727072", italic = true })
   hl(0, "GitUISeparator", { fg = "#403e41" })
 
+  -- Diff filepath bar
+  hl(0, "GitUIDiffBarSep", { fg = "#403e41", bg = "#221f22" })
+  hl(0, "GitUIDiffBarIcon", { fg = "#78dce8", bg = "#221f22" })
+  hl(0, "GitUIDiffBarDir", { fg = "#727072", bg = "#221f22" })
+  hl(0, "GitUIDiffBarFile", { fg = "#fcfcfa", bg = "#221f22", bold = true })
+  hl(0, "GitUIDiffBarHint", { fg = "#5b595c", bg = "#221f22", italic = true })
+
   -- Commit modal
   hl(0, "GitUICommitBorder", { fg = "#403e41", bg = "#221f22" })
   hl(0, "GitUICommitNormal", { fg = "#fcfcfa", bg = "#221f22" })
