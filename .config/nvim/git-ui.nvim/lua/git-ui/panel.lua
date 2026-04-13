@@ -495,13 +495,9 @@ end
 ---@return number|nil conflict_idx 1-based index of the conflict under cursor
 local function get_conflict_at_diff_cursor()
   local ui_state = ui.get_state()
-  if not ui_state.diff_win or not vim.api.nvim_win_is_valid(ui_state.diff_win) then
-    return nil
-  end
-  if vim.api.nvim_get_current_win() ~= ui_state.diff_win then
-    return nil
-  end
-  local cursor_line = vim.api.nvim_win_get_cursor(ui_state.diff_win)[1]
+  local cur_win = vim.api.nvim_get_current_win()
+  if not ui.is_diff_win(cur_win) then return nil end
+  local cursor_line = vim.api.nvim_win_get_cursor(cur_win)[1]
   return ui_state.display_to_conflict_idx and ui_state.display_to_conflict_idx[cursor_line] or nil
 end
 
@@ -864,8 +860,9 @@ function M.get_current_hunk_patch()
 
   -- Find which hunk based on cursor position in diff panel
   local target_hunk = hunks[1]
-  if ui_state.diff_win and vim.api.nvim_win_is_valid(ui_state.diff_win) then
-    local cursor_line = vim.api.nvim_win_get_cursor(ui_state.diff_win)[1]
+  local cur_win = vim.api.nvim_get_current_win()
+  if ui.is_diff_win(cur_win) then
+    local cursor_line = vim.api.nvim_win_get_cursor(cur_win)[1]
     local hunk_idx = ui_state.display_to_hunk_idx[cursor_line]
     if hunk_idx and hunks[hunk_idx] then
       target_hunk = hunks[hunk_idx]

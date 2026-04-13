@@ -26,6 +26,7 @@ M.defaults = {
   },
   layout = {
     status_width = 42,
+    side_by_side_min_width = 120, -- min diff area width to activate SBS
   },
   icons = {
     staged = "✓",

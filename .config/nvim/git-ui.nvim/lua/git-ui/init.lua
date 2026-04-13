@@ -92,10 +92,8 @@ local function setup_keymaps()
   })
 end
 
---- Set up keymaps for the diff panel (minimal — just navigation back).
-local function setup_diff_keymaps()
-  local ui_state = ui.get_state()
-  local buf = ui_state.diff_buf
+--- Set up keymaps for a diff buffer.
+local function setup_diff_buf_keymaps(buf)
   if not buf then return end
 
   local km = config.options.keymaps
@@ -117,13 +115,19 @@ local function setup_diff_keymaps()
   map("]c", function() ui.next_change() end, "Next change")
   map("[c", function() ui.prev_change() end, "Previous change")
 
-  -- Update scrollbar on cursor movement in diff panel
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = buf,
-    callback = function()
-      ui.update_scrollbar()
-    end,
+    callback = function() ui.update_scrollbar() end,
   })
+end
+
+--- Set up keymaps for all diff panels.
+local function setup_diff_keymaps()
+  local ui_state = ui.get_state()
+  setup_diff_buf_keymaps(ui_state.diff_buf)
+  if ui_state.diff_right_buf then
+    setup_diff_buf_keymaps(ui_state.diff_right_buf)
+  end
 end
 
 function M.open()
