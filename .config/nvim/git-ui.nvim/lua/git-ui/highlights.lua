@@ -3,59 +3,68 @@ local M = {}
 function M.setup()
   local hl = vim.api.nvim_set_hl
 
-  -- Panel backgrounds
-  hl(0, "GitUIStatusBg", { bg = "#11111b" })
-  hl(0, "GitUIStatusCursorLine", { bg = "#181825" })
+  -- Panel backgrounds (Monokai Pro)
+  hl(0, "GitUIStatusBg", { bg = "#221f22" })
+  hl(0, "GitUIStatusCursorLine", { bg = "#403e41" })
 
   -- Git status colors
-  hl(0, "GitUIStaged", { fg = "#a6e3a1", bold = true })
-  hl(0, "GitUIModified", { fg = "#f9e2af", bold = true })
-  hl(0, "GitUIUntracked", { fg = "#94e2d5" })
-  hl(0, "GitUIDeleted", { fg = "#f38ba8", bold = true })
-  hl(0, "GitUIRenamed", { fg = "#89b4fa" })
-  hl(0, "GitUIConflict", { fg = "#fab387", bold = true })
+  hl(0, "GitUIStaged", { fg = "#a9dc76", bold = true })
+  hl(0, "GitUIModified", { fg = "#ffd866", bold = true })
+  hl(0, "GitUIUntracked", { fg = "#78dce8" })
+  hl(0, "GitUIDeleted", { fg = "#ff6188", bold = true })
+  hl(0, "GitUIRenamed", { fg = "#ab9df2" })
+  hl(0, "GitUIConflict", { fg = "#fc9867", bold = true })
 
   -- Branch and headers
-  hl(0, "GitUIBranch", { fg = "#cba6f7", bold = true })
-  hl(0, "GitUISectionHeader", { fg = "#7f849c", bold = true })
-  hl(0, "GitUISectionCount", { fg = "#585b70" })
-  hl(0, "GitUIHeader", { fg = "#cdd6f4", bold = true })
+  hl(0, "GitUIBranch", { fg = "#ab9df2", bold = true })
+  hl(0, "GitUISectionHeader", { fg = "#727072", bold = true })
+  hl(0, "GitUISectionCount", { fg = "#5b595c" })
+  hl(0, "GitUIHeader", { fg = "#fcfcfa", bold = true })
 
   -- File paths
-  hl(0, "GitUIFilePath", { fg = "#6c7086" })
-  hl(0, "GitUIFileName", { fg = "#cdd6f4" })
+  hl(0, "GitUIFilePath", { fg = "#727072" })
+  hl(0, "GitUIFileName", { fg = "#fcfcfa" })
 
   -- Help footer
-  hl(0, "GitUIHelpKey", { fg = "#f9e2af", bold = true })
-  hl(0, "GitUIHelpText", { fg = "#585b70" })
+  hl(0, "GitUIHelpKey", { fg = "#ffd866", bold = true })
+  hl(0, "GitUIHelpText", { fg = "#5b595c" })
 
   -- Diff
-  hl(0, "GitUIDiffAdd", { bg = "#1a332a" })
-  hl(0, "GitUIDiffDelete", { bg = "#331a2a" })
-  hl(0, "GitUIDiffAddSign", { fg = "#a6e3a1" })
-  hl(0, "GitUIDiffDelSign", { fg = "#f38ba8" })
-  hl(0, "GitUIDiffHeader", { fg = "#89b4fa", bold = true })
-  hl(0, "GitUIDiffFile", { fg = "#cdd6f4", bold = true })
-  hl(0, "GitUIDiffHunk", { fg = "#cba6f7" })
-  hl(0, "GitUIConflictMarker", { bg = "#3a2a12", fg = "#fab387", bold = true })
-  hl(0, "GitUIConflictMarkerSign", { fg = "#fab387" })
-  hl(0, "GitUIConflictOurs", { bg = "#1f2f2f" })
-  hl(0, "GitUIConflictTheirs", { bg = "#30212f" })
-  hl(0, "GitUIConflictHint", { fg = "#94e2d5" })
+  hl(0, "GitUIDiffAdd", { bg = "#2a3a2a" })
+  hl(0, "GitUIDiffDelete", { bg = "#3a2228" })
+  hl(0, "GitUIDiffAddSign", { fg = "#a9dc76" })
+  hl(0, "GitUIDiffDelSign", { fg = "#ff6188" })
+  hl(0, "GitUIDiffHeader", { fg = "#78dce8", bold = true })
+  hl(0, "GitUIDiffFile", { fg = "#fcfcfa", bold = true })
+  hl(0, "GitUIDiffHunk", { fg = "#ab9df2" })
+  hl(0, "GitUIConflictMarker", { bg = "#3a2e1e", fg = "#fc9867", bold = true })
+  hl(0, "GitUIConflictMarkerSign", { fg = "#fc9867" })
+  hl(0, "GitUIConflictOurs", { bg = "#2a3530" })
+  hl(0, "GitUIConflictTheirs", { bg = "#352a38" })
+  hl(0, "GitUIConflictHint", { fg = "#78dce8" })
 
   -- Misc
-  hl(0, "GitUIClean", { fg = "#a6adc8", italic = true })
-  hl(0, "GitUISeparator", { fg = "#313244" })
+  hl(0, "GitUIClean", { fg = "#727072", italic = true })
+  hl(0, "GitUISeparator", { fg = "#403e41" })
+
+  -- Commit modal
+  hl(0, "GitUICommitBorder", { fg = "#403e41", bg = "#221f22" })
+  hl(0, "GitUICommitNormal", { fg = "#fcfcfa", bg = "#221f22" })
+  hl(0, "GitUICommitTitle", { fg = "#ab9df2", bg = "#221f22", bold = true })
+  hl(0, "GitUICommitPrompt", { fg = "#ffd866" })
+  hl(0, "GitUICommitCounter", { fg = "#727072" })
+  hl(0, "GitUICommitCounterWarn", { fg = "#fc9867" })
+  hl(0, "GitUICommitCounterOver", { fg = "#ff6188", bold = true })
 
   -- Scrollbar
-  hl(0, "GitUIScrollTrack", { bg = "#181825" })
-  hl(0, "GitUIScrollVP", { bg = "#313244" })
-  hl(0, "GitUIScrollAdd", { bg = "#1a332a" })
-  hl(0, "GitUIScrollDel", { bg = "#331a2a" })
-  hl(0, "GitUIScrollAddVP", { bg = "#2a5540" })
-  hl(0, "GitUIScrollDelVP", { bg = "#552a40" })
-  hl(0, "GitUIScrollConflict", { bg = "#5a4120" })
-  hl(0, "GitUIScrollConflictVP", { bg = "#8a6430" })
+  hl(0, "GitUIScrollTrack", { bg = "#221f22" })
+  hl(0, "GitUIScrollVP", { bg = "#403e41" })
+  hl(0, "GitUIScrollAdd", { bg = "#2a3a2a" })
+  hl(0, "GitUIScrollDel", { bg = "#3a2228" })
+  hl(0, "GitUIScrollAddVP", { bg = "#3a5a3a" })
+  hl(0, "GitUIScrollDelVP", { bg = "#5a3040" })
+  hl(0, "GitUIScrollConflict", { bg = "#4a3820" })
+  hl(0, "GitUIScrollConflictVP", { bg = "#6a5030" })
 end
 
 return M

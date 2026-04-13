@@ -8,18 +8,24 @@ local ns_ts = vim.api.nvim_create_namespace("git-ui-ts")
 local state = {
   status_buf = nil,
   status_win = nil,
+  help_buf = nil,
+  help_win = nil,
   diff_buf = nil,
   diff_win = nil,
+  diffbar_buf = nil,
+  diffbar_win = nil,
   scrollbar_buf = nil,
   scrollbar_win = nil,
   is_open = false,
   prev_win = nil,
+  prev_laststatus = nil,
   change_starts = {},
   change_lines_set = {}, -- line_nr -> "add" | "del"
   raw_diff_lines = {},
   display_to_hunk_idx = {},
   display_to_conflict_idx = {}, -- display_line_nr -> conflict_idx (1-based)
   conflict_count = 0,
+  help_height = 12, -- lines reserved for the fixed help footer
 }
 
 function M.get_state()
@@ -42,11 +48,17 @@ function M.open(status_width)
   if state.is_open then return end
   state.prev_win = vim.api.nvim_get_current_win()
 
-  -- Calculate layout dimensions
+  -- Hide background statusline so "[No Name]" doesn't bleed through
+  state.prev_laststatus = vim.o.laststatus
+  vim.o.laststatus = 0
+
+  -- Calculate layout dimensions — cover full editor (only cmdline below)
   local editor_width = vim.o.columns
-  local editor_height = vim.o.lines - 2 -- subtract statusline + cmdline
+  local editor_height = vim.o.lines - 1
   local scrollbar_width = 2
   local diff_width = math.max(1, editor_width - status_width - scrollbar_width)
+  local diffbar_height = 1
+  local diff_content_height = editor_height - diffbar_height
 
   -- Create buffers
   state.status_buf = vim.api.nvim_create_buf(false, true)
@@ -59,19 +71,45 @@ function M.open(status_width)
   vim.bo[state.diff_buf].buftype = "nofile"
   vim.bo[state.diff_buf].bufhidden = "wipe"
   vim.bo[state.diff_buf].swapfile = false
+  vim.bo[state.diff_buf].filetype = "git-ui-diff"
 
   state.scrollbar_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[state.scrollbar_buf].buftype = "nofile"
   vim.bo[state.scrollbar_buf].bufhidden = "wipe"
   vim.bo[state.scrollbar_buf].swapfile = false
 
-  -- Full-screen floating windows (no tabs)
+  -- Help footer buffer (fixed, non-scrollable)
+  state.help_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[state.help_buf].buftype = "nofile"
+  vim.bo[state.help_buf].bufhidden = "wipe"
+  vim.bo[state.help_buf].swapfile = false
+
+  -- Diff filepath bar buffer
+  state.diffbar_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[state.diffbar_buf].buftype = "nofile"
+  vim.bo[state.diffbar_buf].bufhidden = "wipe"
+  vim.bo[state.diffbar_buf].swapfile = false
+
+  local status_height = editor_height - state.help_height
+
+  -- Full-screen floating windows
   state.status_win = vim.api.nvim_open_win(state.status_buf, true, {
     relative = "editor",
     row = 0,
     col = 0,
     width = status_width,
-    height = editor_height,
+    height = status_height,
+    style = "minimal",
+    border = "none",
+    zindex = 40,
+  })
+
+  state.help_win = vim.api.nvim_open_win(state.help_buf, false, {
+    relative = "editor",
+    row = status_height,
+    col = 0,
+    width = status_width,
+    height = state.help_height,
     style = "minimal",
     border = "none",
     zindex = 40,
@@ -82,7 +120,18 @@ function M.open(status_width)
     row = 0,
     col = status_width,
     width = diff_width,
-    height = editor_height,
+    height = diff_content_height,
+    style = "minimal",
+    border = "none",
+    zindex = 40,
+  })
+
+  state.diffbar_win = vim.api.nvim_open_win(state.diffbar_buf, false, {
+    relative = "editor",
+    row = diff_content_height,
+    col = status_width,
+    width = diff_width + scrollbar_width,
+    height = diffbar_height,
     style = "minimal",
     border = "none",
     zindex = 40,
@@ -93,7 +142,7 @@ function M.open(status_width)
     row = 0,
     col = status_width + diff_width,
     width = scrollbar_width,
-    height = editor_height,
+    height = diff_content_height,
     style = "minimal",
     border = "none",
     zindex = 40,
@@ -110,7 +159,6 @@ function M.open(status_width)
     foldcolumn = "0",
     spell = false,
     list = false,
-    statusline = " %#GitUIBranch# Git %#Normal#",
     winhighlight = "Normal:GitUIStatusBg,CursorLine:GitUIStatusCursorLine",
   }
   for k, v in pairs(status_opts) do
@@ -126,10 +174,44 @@ function M.open(status_width)
     cursorline = false,
     spell = false,
     list = false,
-    statusline = " %#GitUIDiffHeader# Diff Preview %#Normal#",
   }
   for k, v in pairs(diff_opts) do
     vim.wo[state.diff_win][k] = v
+  end
+
+  -- Diff filepath bar window options
+  local diffbar_opts = {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    wrap = false,
+    cursorline = false,
+    winfixheight = true,
+    foldcolumn = "0",
+    spell = false,
+    list = false,
+    winhighlight = "Normal:GitUIStatusBg",
+  }
+  for k, v in pairs(diffbar_opts) do
+    vim.wo[state.diffbar_win][k] = v
+  end
+
+  -- Help footer window options
+  local help_opts = {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    wrap = false,
+    cursorline = false,
+    winfixwidth = true,
+    winfixheight = true,
+    foldcolumn = "0",
+    spell = false,
+    list = false,
+    winhighlight = "Normal:GitUIStatusBg",
+  }
+  for k, v in pairs(help_opts) do
+    vim.wo[state.help_win][k] = v
   end
 
   -- Scrollbar window options
@@ -143,7 +225,6 @@ function M.open(status_width)
     foldcolumn = "0",
     spell = false,
     list = false,
-    statusline = " ",
   }
   for k, v in pairs(sb_opts) do
     vim.wo[state.scrollbar_win][k] = v
@@ -152,7 +233,7 @@ function M.open(status_width)
   state.is_open = true
 
   -- Auto-cleanup when any buffer is wiped (e.g. user :q on a panel)
-  for _, buf in ipairs({ state.status_buf, state.diff_buf, state.scrollbar_buf }) do
+  for _, buf in ipairs({ state.status_buf, state.help_buf, state.diff_buf, state.diffbar_buf, state.scrollbar_buf }) do
     vim.api.nvim_create_autocmd("BufWipeout", {
       buffer = buf,
       once = true,
@@ -172,8 +253,14 @@ function M.close()
   if not state.is_open then return end
   state.is_open = false
 
+  -- Restore background statusline
+  if state.prev_laststatus then
+    vim.o.laststatus = state.prev_laststatus
+    state.prev_laststatus = nil
+  end
+
   -- Close all floating windows (bufhidden=wipe handles buffer cleanup)
-  for _, win in ipairs({ state.scrollbar_win, state.diff_win, state.status_win }) do
+  for _, win in ipairs({ state.scrollbar_win, state.diffbar_win, state.diff_win, state.help_win, state.status_win }) do
     if win_valid(win) then
       pcall(vim.api.nvim_win_close, win, true)
     end
@@ -186,8 +273,12 @@ function M.close()
 
   state.status_buf = nil
   state.status_win = nil
+  state.help_buf = nil
+  state.help_win = nil
   state.diff_buf = nil
   state.diff_win = nil
+  state.diffbar_buf = nil
+  state.diffbar_win = nil
   state.scrollbar_buf = nil
   state.scrollbar_win = nil
 end
@@ -212,22 +303,54 @@ function M.set_status_lines(lines, highlights)
   vim.bo[state.status_buf].modifiable = false
 end
 
-function M.set_diff_statusline(filepath)
-  if not win_valid(state.diff_win) then return end
-  if filepath then
-    local safe = filepath:gsub("%%", "%%%%")
-    vim.wo[state.diff_win].statusline = " %#GitUIDiffFile# " .. safe .. " %#Normal#"
-  else
-    vim.wo[state.diff_win].statusline = " %#GitUIHelpText# Diff Preview %#Normal#"
+local ns_help = vim.api.nvim_create_namespace("git-ui-help")
+
+function M.set_help_lines(lines, highlights)
+  if not buf_valid(state.help_buf) then return end
+  vim.bo[state.help_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(state.help_buf, 0, -1, false, lines)
+  vim.api.nvim_buf_clear_namespace(state.help_buf, ns_help, 0, -1)
+  if highlights then
+    for _, hl in ipairs(highlights) do
+      vim.api.nvim_buf_add_highlight(
+        state.help_buf,
+        ns_help,
+        hl.group,
+        hl.line,
+        hl.col_start or 0,
+        hl.col_end or -1
+      )
+    end
   end
+  vim.bo[state.help_buf].modifiable = false
+end
+
+local ns_diffbar = vim.api.nvim_create_namespace("git-ui-diffbar")
+
+function M.set_diff_statusline(filepath)
+  if not buf_valid(state.diffbar_buf) then return end
+  vim.bo[state.diffbar_buf].modifiable = true
+  local text
+  if filepath then
+    text = "  " .. filepath
+  else
+    text = "  Diff Preview"
+  end
+  vim.api.nvim_buf_set_lines(state.diffbar_buf, 0, -1, false, { text })
+  vim.api.nvim_buf_clear_namespace(state.diffbar_buf, ns_diffbar, 0, -1)
+  local hl = filepath and "GitUIDiffFile" or "GitUIHelpText"
+  vim.api.nvim_buf_add_highlight(state.diffbar_buf, ns_diffbar, hl, 0, 0, -1)
+  vim.bo[state.diffbar_buf].modifiable = false
 end
 
 function M.resize_status(delta)
   if not state.is_open then return end
   local cfg = require("git-ui.config")
   local editor_width = vim.o.columns
-  local editor_height = vim.o.lines - 2
+  local editor_height = vim.o.lines - 1
   local scrollbar_width = 2
+  local diffbar_height = 1
+  local diff_content_height = editor_height - diffbar_height
   local min_w = 20
   local max_w = math.floor(editor_width * 0.6)
   local cur_w = cfg.options.layout.status_width
@@ -235,19 +358,30 @@ function M.resize_status(delta)
   if new_w == cur_w then return end
   cfg.options.layout.status_width = new_w
   local diff_w = math.max(1, editor_width - new_w - scrollbar_width)
+  local status_height = editor_height - state.help_height
   if win_valid(state.status_win) then
     pcall(vim.api.nvim_win_set_config, state.status_win, {
-      relative = "editor", row = 0, col = 0, width = new_w, height = editor_height,
+      relative = "editor", row = 0, col = 0, width = new_w, height = status_height,
+    })
+  end
+  if win_valid(state.help_win) then
+    pcall(vim.api.nvim_win_set_config, state.help_win, {
+      relative = "editor", row = status_height, col = 0, width = new_w, height = state.help_height,
     })
   end
   if win_valid(state.diff_win) then
     pcall(vim.api.nvim_win_set_config, state.diff_win, {
-      relative = "editor", row = 0, col = new_w, width = diff_w, height = editor_height,
+      relative = "editor", row = 0, col = new_w, width = diff_w, height = diff_content_height,
+    })
+  end
+  if win_valid(state.diffbar_win) then
+    pcall(vim.api.nvim_win_set_config, state.diffbar_win, {
+      relative = "editor", row = diff_content_height, col = new_w, width = diff_w + scrollbar_width, height = diffbar_height,
     })
   end
   if win_valid(state.scrollbar_win) then
     pcall(vim.api.nvim_win_set_config, state.scrollbar_win, {
-      relative = "editor", row = 0, col = new_w + diff_w, width = scrollbar_width, height = editor_height,
+      relative = "editor", row = 0, col = new_w + diff_w, width = scrollbar_width, height = diff_content_height,
     })
   end
 end
@@ -438,25 +572,22 @@ function M.set_diff_lines(lines, opts)
   vim.api.nvim_buf_clear_namespace(state.diff_buf, ns_ts, 0, -1)
   vim.api.nvim_buf_clear_namespace(state.diff_buf, ns_diff, 0, -1)
 
-  -- Syntax highlighting: set filetype for baseline vim regex syntax, then
-  -- enhance with treesitter highlights parsed from valid reconstructed source.
+  -- Syntax highlighting: use vim.bo.syntax (not filetype) for baseline vim
+  -- regex syntax so the buffer filetype stays as git-ui-diff for lualine.
+  -- Enhance with treesitter highlights parsed from valid reconstructed source.
   if filepath then
     local ft = vim.filetype.match({ filename = filepath })
     if ft then
-      -- Set filetype — triggers vim regex syntax as baseline highlighting.
-      -- nvim-treesitter's FileType autocmd will also auto-start treesitter,
-      -- but it can't parse the invalid interleaved diff content, so we stop
-      -- it and restore vim regex syntax instead.
-      vim.bo[state.diff_buf].filetype = ft
+      -- Stop any previous treesitter before changing syntax
+      pcall(vim.treesitter.stop, state.diff_buf)
 
       if opts.conflict then
-        -- Conflict content is mostly valid — keep treesitter on the buffer
+        -- Conflict content is mostly valid — use treesitter directly
+        vim.bo[state.diff_buf].syntax = ft
         local lang = vim.treesitter.language.get_lang(ft) or ft
         pcall(vim.treesitter.start, state.diff_buf, lang)
       else
-        -- Stop treesitter (can't handle interleaved add/del lines) and
-        -- re-enable vim regex syntax that treesitter.start disabled.
-        pcall(vim.treesitter.stop, state.diff_buf)
+        -- Set vim regex syntax as baseline (filetype stays git-ui-diff)
         vim.bo[state.diff_buf].syntax = ft
 
         -- Layer richer treesitter highlights on top by parsing valid source.

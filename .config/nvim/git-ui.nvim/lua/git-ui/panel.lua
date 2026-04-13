@@ -219,10 +219,19 @@ function M.render()
     end
   end
 
+  state.line_map = line_map
+  ui.set_status_lines(lines, highlights)
+end
+
+--- Render the fixed help footer panel.
+function M.render_help()
+  local width = config.options.layout.status_width
+  local lines = {}
+  local highlights = {}
+
   -- Separator
   table.insert(lines, "  " .. string.rep("─", width - 4))
   table.insert(highlights, { group = "GitUISeparator", line = #lines - 1 })
-  line_map[#lines] = { type = "separator" }
 
   -- Help footer with key highlighting
   local help_rows = {
@@ -256,7 +265,6 @@ function M.render()
     end
 
     table.insert(lines, line_str)
-    line_map[#lines] = { type = "help" }
 
     for _, kr in ipairs(key_ranges) do
       table.insert(highlights, {
@@ -276,8 +284,7 @@ function M.render()
     end
   end
 
-  state.line_map = line_map
-  ui.set_status_lines(lines, highlights)
+  ui.set_help_lines(lines, highlights)
 end
 
 --- Move cursor to the first file line after render.
@@ -307,6 +314,7 @@ function M.refresh(callback)
     if done >= total then
       state.loading = false
       M.render()
+      M.render_help()
       M.update_diff_for_cursor()
       if callback then callback() end
     end
@@ -662,8 +670,86 @@ function M.toggle_section()
 end
 
 function M.do_commit()
-  vim.ui.input({ prompt = "  Commit message: " }, function(msg)
-    if not msg or msg == "" then return end
+  local width = 60
+  local col = math.floor((vim.o.columns - width) / 2)
+  local row = math.floor(vim.o.lines * 0.35)
+
+  -- Title bar (non-editable)
+  local title_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[title_buf].buftype = "nofile"
+  vim.bo[title_buf].bufhidden = "wipe"
+  local title_text = "  Commit"
+  vim.api.nvim_buf_set_lines(title_buf, 0, -1, false, { title_text })
+  vim.api.nvim_buf_add_highlight(title_buf, -1, "GitUICommitTitle", 0, 0, -1)
+
+  local title_win = vim.api.nvim_open_win(title_buf, false, {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = width,
+    height = 1,
+    style = "minimal",
+    border = { "╭", "─", "╮", "│", "", "", "", "│" },
+    zindex = 60,
+  })
+  vim.wo[title_win].winhighlight = "Normal:GitUICommitNormal,FloatBorder:GitUICommitBorder"
+
+  -- Input buffer
+  local input_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[input_buf].buftype = "nofile"
+  vim.bo[input_buf].bufhidden = "wipe"
+
+  local input_win = vim.api.nvim_open_win(input_buf, true, {
+    relative = "editor",
+    row = row + 2,
+    col = col,
+    width = width,
+    height = 1,
+    style = "minimal",
+    border = { "├", "─", "┤", "│", "╯", "─", "╰", "│" },
+    zindex = 60,
+  })
+  vim.wo[input_win].winhighlight = "Normal:GitUICommitNormal,FloatBorder:GitUICommitBorder"
+
+  -- Character counter namespace
+  local ns = vim.api.nvim_create_namespace("git-ui-commit-counter")
+
+  local function update_counter()
+    if not vim.api.nvim_buf_is_valid(title_buf) then return end
+    local lines = vim.api.nvim_buf_get_lines(input_buf, 0, 1, false)
+    local len = #(lines[1] or "")
+    local counter = string.format("%d/50", len)
+    local hl = "GitUICommitCounter"
+    if len > 50 then hl = "GitUICommitCounterOver"
+    elseif len > 40 then hl = "GitUICommitCounterWarn" end
+    vim.bo[title_buf].modifiable = true
+    local padded = title_text .. string.rep(" ", width - #title_text - #counter) .. counter
+    vim.api.nvim_buf_set_lines(title_buf, 0, -1, false, { padded })
+    vim.api.nvim_buf_clear_namespace(title_buf, ns, 0, -1)
+    vim.api.nvim_buf_add_highlight(title_buf, ns, "GitUICommitTitle", 0, 0, #title_text)
+    vim.api.nvim_buf_add_highlight(title_buf, ns, hl, 0, #padded - #counter, -1)
+    vim.bo[title_buf].modifiable = false
+  end
+
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    buffer = input_buf,
+    callback = update_counter,
+  })
+
+  update_counter()
+  vim.cmd("startinsert")
+
+  local function close()
+    vim.cmd("stopinsert")
+    if vim.api.nvim_win_is_valid(input_win) then vim.api.nvim_win_close(input_win, true) end
+    if vim.api.nvim_win_is_valid(title_win) then vim.api.nvim_win_close(title_win, true) end
+  end
+
+  local function submit()
+    local lines = vim.api.nvim_buf_get_lines(input_buf, 0, 1, false)
+    local msg = vim.trim(lines[1] or "")
+    close()
+    if msg == "" then return end
     git.commit(msg, function(ok, output)
       if ok then
         vim.notify("✓ " .. vim.trim(output):match("[^\n]*$"), vim.log.levels.INFO)
@@ -672,7 +758,11 @@ function M.do_commit()
         vim.notify("Commit failed: " .. output, vim.log.levels.ERROR)
       end
     end)
-  end)
+  end
+
+  vim.keymap.set({ "n", "i" }, "<CR>", submit, { buffer = input_buf })
+  vim.keymap.set({ "n", "i" }, "<Esc>", close, { buffer = input_buf })
+  vim.keymap.set("n", "q", close, { buffer = input_buf })
 end
 
 function M.do_push()
