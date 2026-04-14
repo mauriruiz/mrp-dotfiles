@@ -86,7 +86,12 @@ function M.open(status_width)
 
   local cfg = require("git-ui.config")
   local editor_width = vim.o.columns
-  local editor_height = vim.o.lines - 1
+  -- vim.o.lines = total rows. Subtract tabline (1 if visible) and cmdheight.
+  -- We set laststatus=0 so no statusline row to subtract.
+  local tabline = (vim.o.showtabline == 0) and 0
+    or (vim.o.showtabline == 1 and vim.fn.tabpagenr("$") == 1) and 0
+    or 1
+  local editor_height = vim.o.lines - tabline - vim.o.cmdheight
   local scrollbar_width = 2
   local diff_width = math.max(1, editor_width - status_width - scrollbar_width)
   local diffbar_height = 1
@@ -345,7 +350,12 @@ function M.resize_status(delta)
   if not state.is_open then return end
   local cfg = require("git-ui.config")
   local editor_width = vim.o.columns
-  local editor_height = vim.o.lines - 1
+  -- vim.o.lines = total rows. Subtract tabline (1 if visible) and cmdheight.
+  -- We set laststatus=0 so no statusline row to subtract.
+  local tabline = (vim.o.showtabline == 0) and 0
+    or (vim.o.showtabline == 1 and vim.fn.tabpagenr("$") == 1) and 0
+    or 1
+  local editor_height = vim.o.lines - tabline - vim.o.cmdheight
   local scrollbar_width = 2
   local diffbar_height = 1
   local diff_content_height = editor_height - diffbar_height
