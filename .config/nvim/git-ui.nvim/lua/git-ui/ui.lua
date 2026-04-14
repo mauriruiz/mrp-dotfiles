@@ -138,9 +138,7 @@ function M.open(status_width)
       width = left_width, height = diff_content_height,
       style = "minimal", border = "none", zindex = 40,
     })
-    set_win_opts(state.diff_win, vim.tbl_extend("force", diff_win_opts, {
-      scrollbind = true, cursorbind = true,
-    }))
+    set_win_opts(state.diff_win, diff_win_opts)
 
     -- Divider
     state.divider_buf = make_nofile_buf()
@@ -167,9 +165,7 @@ function M.open(status_width)
       width = right_width, height = diff_content_height,
       style = "minimal", border = "none", zindex = 40,
     })
-    set_win_opts(state.diff_right_win, vim.tbl_extend("force", diff_win_opts, {
-      scrollbind = true, cursorbind = true,
-    }))
+    set_win_opts(state.diff_right_win, diff_win_opts)
   else
     -- Unified mode: single diff pane
     state.diff_win = vim.api.nvim_open_win(state.diff_buf, false, {
@@ -253,6 +249,7 @@ function M.close()
   state.scrollbar_buf = nil
   state.scrollbar_win = nil
   state.sbs_mode = false
+  pcall(vim.api.nvim_del_augroup_by_name, "git-ui-sbs-sync")
 end
 
 function M.set_status_lines(lines, highlights)
@@ -862,7 +859,7 @@ function M.set_diff_lines(lines, opts)
     vim.bo[state.diff_buf].modifiable = false
     vim.bo[state.diff_right_buf].modifiable = false
 
-    -- Auto-scroll to first change
+    -- Auto-scroll to first change and sync scrollbind
     if #state.change_starts > 0 then
       local first = state.change_starts[1]
       if win_valid(state.diff_win) then
@@ -1061,6 +1058,79 @@ function M.update_scrollbar()
     vim.api.nvim_buf_add_highlight(state.scrollbar_buf, ns_scrollbar, hl.group, hl.line, 0, -1)
   end
   vim.bo[state.scrollbar_buf].modifiable = false
+end
+
+---------------------------------------------------------------------------
+-- Side-by-side scroll sync
+---------------------------------------------------------------------------
+
+local syncing_scroll = false
+
+local function sync_win_to(src_win, dst_win)
+  if not win_valid(src_win) or not win_valid(dst_win) then return end
+  local top = vim.fn.line("w0", src_win)
+  local src_cursor = vim.api.nvim_win_get_cursor(src_win)
+  -- Clamp cursor row to dst buffer line count
+  local dst_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(dst_win))
+  local row = math.min(src_cursor[1], dst_count)
+  pcall(vim.api.nvim_win_set_cursor, dst_win, { row, src_cursor[2] })
+  pcall(vim.api.nvim_win_call, dst_win, function()
+    vim.cmd("normal! " .. top .. "zt")
+  end)
+end
+
+--- Set up autocmds for scroll sync on both diff panes.
+function M.setup_scroll_sync()
+  if not state.sbs_mode then return end
+  local group = vim.api.nvim_create_augroup("git-ui-sbs-sync", { clear = true })
+
+  -- WinScrolled fires for ANY window scroll (including mouse on unfocused pane)
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    group = group,
+    callback = function(ev)
+      if syncing_scroll then return end
+      if not state.sbs_mode then return end
+      -- ev.match is the scrolled window id as a string
+      local scrolled = tonumber(ev.match)
+      local src_win, dst_win
+      if scrolled == state.diff_win then
+        src_win, dst_win = state.diff_win, state.diff_right_win
+      elseif scrolled == state.diff_right_win then
+        src_win, dst_win = state.diff_right_win, state.diff_win
+      else
+        return
+      end
+      syncing_scroll = true
+      sync_win_to(src_win, dst_win)
+      syncing_scroll = false
+    end,
+  })
+
+  -- CursorMoved for keyboard navigation sync
+  for _, buf in ipairs({ state.diff_buf, state.diff_right_buf }) do
+    if buf_valid(buf) then
+      vim.api.nvim_create_autocmd("CursorMoved", {
+        group = group,
+        buffer = buf,
+        callback = function()
+          if syncing_scroll then return end
+          if not state.sbs_mode then return end
+          local cur = vim.api.nvim_get_current_win()
+          local src_win, dst_win
+          if cur == state.diff_win then
+            src_win, dst_win = state.diff_win, state.diff_right_win
+          elseif cur == state.diff_right_win then
+            src_win, dst_win = state.diff_right_win, state.diff_win
+          else
+            return
+          end
+          syncing_scroll = true
+          sync_win_to(src_win, dst_win)
+          syncing_scroll = false
+        end,
+      })
+    end
+  end
 end
 
 ---------------------------------------------------------------------------

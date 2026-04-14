@@ -141,6 +141,7 @@ function M.open()
   ui.open(config.options.layout.status_width)
   setup_keymaps()
   setup_diff_keymaps()
+  ui.setup_scroll_sync()
 
   -- Global scroll tracking for scrollbar (cleaned up on close)
   local augroup = vim.api.nvim_create_augroup("git-ui-scroll", { clear = true })
