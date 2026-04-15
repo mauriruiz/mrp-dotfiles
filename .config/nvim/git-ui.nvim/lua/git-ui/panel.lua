@@ -6,7 +6,7 @@ local config = require("git-ui.config")
 
 --- Notify that works with cmdheight=0 by forcing a redraw.
 local function notify(msg, level)
-  notify(msg, level)
+  vim.api.nvim_notify(msg, level or vim.log.levels.INFO, {})
   vim.cmd("redraw")
 end
 
