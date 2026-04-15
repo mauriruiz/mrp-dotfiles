@@ -4,6 +4,12 @@ local git = require("git-ui.git")
 local ui = require("git-ui.ui")
 local config = require("git-ui.config")
 
+--- Notify that works with cmdheight=0 by forcing a redraw.
+local function notify(msg, level)
+  notify(msg, level)
+  vim.cmd("redraw")
+end
+
 local state = {
   files = { conflicted = {}, staged = {}, changed = {}, untracked = {} },
   branch = { name = "", ahead = 0, behind = 0 },
@@ -419,7 +425,7 @@ function M.stage_file()
     if ok then
       M.refresh()
     else
-      vim.notify("Stage failed: " .. err, vim.log.levels.ERROR)
+      notify("Stage failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
@@ -432,7 +438,7 @@ function M.unstage_file()
     if ok then
       M.refresh()
     else
-      vim.notify("Unstage failed: " .. err, vim.log.levels.ERROR)
+      notify("Unstage failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
@@ -442,11 +448,11 @@ function M.discard_file()
   if not item or item.type ~= "file" then return end
 
   if item.section == "staged" then
-    vim.notify("Unstage file before discarding changes", vim.log.levels.WARN)
+    notify("Unstage file before discarding changes", vim.log.levels.WARN)
     return
   end
   if item.section == "conflicted" then
-    vim.notify("Use conflict resolve actions (o/i/B/m) for conflicted files", vim.log.levels.WARN)
+    notify("Use conflict resolve actions (o/i/B/m) for conflicted files", vim.log.levels.WARN)
     return
   end
 
@@ -462,10 +468,10 @@ function M.discard_file()
 
   git.discard(path, item.section == "untracked", function(ok, err)
     if ok then
-      vim.notify("Discarded: " .. path, vim.log.levels.INFO)
+      notify("Discarded: " .. path, vim.log.levels.INFO)
       M.refresh()
     else
-      vim.notify("Discard failed: " .. err, vim.log.levels.ERROR)
+      notify("Discard failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
@@ -514,23 +520,23 @@ local function resolve_conflict(strategy, success_msg)
     git.resolve_single_conflict(path, conflict_idx, strategy, function(ok, err)
       if ok then
         local total = ui.get_state().conflict_count or 0
-        vim.notify(
+        notify(
           string.format("%s (#%d/%d): %s", success_msg, conflict_idx, total, path),
           vim.log.levels.INFO
         )
         M.refresh()
       else
-        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+        notify("Resolve failed: " .. err, vim.log.levels.ERROR)
       end
     end)
   else
     -- Whole-file resolution from status panel
     git.resolve_conflict(path, strategy, function(ok, err)
       if ok then
-        vim.notify(success_msg .. ": " .. path, vim.log.levels.INFO)
+        notify(success_msg .. ": " .. path, vim.log.levels.INFO)
         M.refresh()
       else
-        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+        notify("Resolve failed: " .. err, vim.log.levels.ERROR)
       end
     end)
   end
@@ -557,23 +563,23 @@ function M.resolve_conflict_both()
     git.resolve_single_conflict(path, conflict_idx, "both", function(ok, err)
       if ok then
         local total = ui.get_state().conflict_count or 0
-        vim.notify(
+        notify(
           string.format("Accepted both changes (#%d/%d): %s", conflict_idx, total, path),
           vim.log.levels.INFO
         )
         M.refresh()
       else
-        vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
+        notify("Resolve failed: " .. err, vim.log.levels.ERROR)
       end
     end)
   else
     -- Whole-file "both"
     git.resolve_conflict_both(path, function(ok, err)
       if ok then
-        vim.notify("Accepted both changes: " .. path, vim.log.levels.INFO)
+        notify("Accepted both changes: " .. path, vim.log.levels.INFO)
         M.refresh()
       else
-        vim.notify("Resolve both failed: " .. err, vim.log.levels.ERROR)
+        notify("Resolve both failed: " .. err, vim.log.levels.ERROR)
       end
     end)
   end
@@ -586,10 +592,10 @@ function M.mark_conflict_resolved()
   local path = item.file.actual_path
   git.stage(path, function(ok, err)
     if ok then
-      vim.notify("Marked resolved: " .. path, vim.log.levels.INFO)
+      notify("Marked resolved: " .. path, vim.log.levels.INFO)
       M.refresh()
     else
-      vim.notify("Mark resolved failed: " .. err, vim.log.levels.ERROR)
+      notify("Mark resolved failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
@@ -601,7 +607,7 @@ function M.undo_conflict()
   local path = item.file.actual_path
   local hist = state.conflict_history[path]
   if not hist or #hist.undo == 0 then
-    vim.notify("Nothing to undo", vim.log.levels.WARN)
+    notify("Nothing to undo", vim.log.levels.WARN)
     return
   end
 
@@ -618,11 +624,11 @@ function M.undo_conflict()
   local prev = table.remove(hist.undo)
   local ok_w, err = pcall(vim.fn.writefile, prev, full_path)
   if not ok_w then
-    vim.notify("Undo failed: " .. tostring(err), vim.log.levels.ERROR)
+    notify("Undo failed: " .. tostring(err), vim.log.levels.ERROR)
     return
   end
 
-  vim.notify("Undid conflict resolution", vim.log.levels.INFO)
+  notify("Undid conflict resolution", vim.log.levels.INFO)
   M.refresh()
 end
 
@@ -633,7 +639,7 @@ function M.redo_conflict()
   local path = item.file.actual_path
   local hist = state.conflict_history[path]
   if not hist or #hist.redo == 0 then
-    vim.notify("Nothing to redo", vim.log.levels.WARN)
+    notify("Nothing to redo", vim.log.levels.WARN)
     return
   end
 
@@ -650,11 +656,11 @@ function M.redo_conflict()
   local next_state = table.remove(hist.redo)
   local ok_w, err = pcall(vim.fn.writefile, next_state, full_path)
   if not ok_w then
-    vim.notify("Redo failed: " .. tostring(err), vim.log.levels.ERROR)
+    notify("Redo failed: " .. tostring(err), vim.log.levels.ERROR)
     return
   end
 
-  vim.notify("Redid conflict resolution", vim.log.levels.INFO)
+  notify("Redid conflict resolution", vim.log.levels.INFO)
   M.refresh()
 end
 
@@ -748,10 +754,10 @@ function M.do_commit()
     if msg == "" then return end
     git.commit(msg, function(ok, output)
       if ok then
-        vim.notify("✓ " .. vim.trim(output):match("[^\n]*$"), vim.log.levels.INFO)
+        notify("✓ " .. vim.trim(output):match("[^\n]*$"), vim.log.levels.INFO)
         M.refresh()
       else
-        vim.notify("Commit failed: " .. output, vim.log.levels.ERROR)
+        notify("Commit failed: " .. output, vim.log.levels.ERROR)
       end
     end)
   end
@@ -762,25 +768,25 @@ function M.do_commit()
 end
 
 function M.do_push()
-  vim.notify("Pushing...", vim.log.levels.INFO)
+  notify("Pushing...", vim.log.levels.INFO)
   git.push(function(ok, output)
     if ok then
-      vim.notify("✓ Pushed successfully", vim.log.levels.INFO)
+      notify("✓ Pushed successfully", vim.log.levels.INFO)
       M.refresh()
     else
-      vim.notify("Push failed: " .. output, vim.log.levels.ERROR)
+      notify("Push failed: " .. output, vim.log.levels.ERROR)
     end
   end)
 end
 
 function M.do_pull()
-  vim.notify("Pulling...", vim.log.levels.INFO)
+  notify("Pulling...", vim.log.levels.INFO)
   git.pull(function(ok, output)
     if ok then
-      vim.notify("✓ Pulled successfully", vim.log.levels.INFO)
+      notify("✓ Pulled successfully", vim.log.levels.INFO)
       M.refresh()
     else
-      vim.notify("Pull failed: " .. output, vim.log.levels.ERROR)
+      notify("Pull failed: " .. output, vim.log.levels.ERROR)
     end
   end)
 end
@@ -788,7 +794,7 @@ end
 function M.show_branches()
   git.branches(function(branches)
     if #branches == 0 then
-      vim.notify("No branches found", vim.log.levels.WARN)
+      notify("No branches found", vim.log.levels.WARN)
       return
     end
     local items = {}
@@ -801,10 +807,10 @@ function M.show_branches()
       if branch.current then return end
       git.checkout(branch.name, function(ok, output)
         if ok then
-          vim.notify("Switched to " .. branch.name, vim.log.levels.INFO)
+          notify("Switched to " .. branch.name, vim.log.levels.INFO)
           M.refresh()
         else
-          vim.notify("Checkout failed: " .. output, vim.log.levels.ERROR)
+          notify("Checkout failed: " .. output, vim.log.levels.ERROR)
         end
       end)
     end)
@@ -816,10 +822,10 @@ function M.create_branch()
     if not name or name == "" then return end
     git.create_branch(name, function(ok, output)
       if ok then
-        vim.notify("Created branch " .. name, vim.log.levels.INFO)
+        notify("Created branch " .. name, vim.log.levels.INFO)
         M.refresh()
       else
-        vim.notify("Failed: " .. output, vim.log.levels.ERROR)
+        notify("Failed: " .. output, vim.log.levels.ERROR)
       end
     end)
   end)
@@ -877,7 +883,7 @@ end
 function M.stage_hunk()
   local patch, item = M.get_current_hunk_patch()
   if not patch or not item then
-    vim.notify("No hunk to stage", vim.log.levels.WARN)
+    notify("No hunk to stage", vim.log.levels.WARN)
     return
   end
   if item.section == "staged" then return end
@@ -885,7 +891,7 @@ function M.stage_hunk()
     if ok then
       M.refresh()
     else
-      vim.notify("Stage hunk failed: " .. err, vim.log.levels.ERROR)
+      notify("Stage hunk failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end
@@ -893,7 +899,7 @@ end
 function M.unstage_hunk()
   local patch, item = M.get_current_hunk_patch()
   if not patch or not item then
-    vim.notify("No hunk to unstage", vim.log.levels.WARN)
+    notify("No hunk to unstage", vim.log.levels.WARN)
     return
   end
   if item.section ~= "staged" then return end
@@ -901,7 +907,7 @@ function M.unstage_hunk()
     if ok then
       M.refresh()
     else
-      vim.notify("Unstage hunk failed: " .. err, vim.log.levels.ERROR)
+      notify("Unstage hunk failed: " .. err, vim.log.levels.ERROR)
     end
   end)
 end

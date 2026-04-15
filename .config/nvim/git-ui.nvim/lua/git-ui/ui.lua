@@ -1165,36 +1165,55 @@ function M.is_diff_win(win)
   return win == state.diff_win or win == state.diff_right_win
 end
 
-function M.next_change()
-  if not win_valid(state.diff_win) or #state.change_starts == 0 then return end
-  local cur = vim.api.nvim_win_get_cursor(state.diff_win)[1]
-  for _, line_nr in ipairs(state.change_starts) do
-    if line_nr > cur then
-      vim.api.nvim_win_set_cursor(state.diff_win, { line_nr, 0 })
-      vim.api.nvim_win_call(state.diff_win, function() vim.cmd("normal! zz") end)
-      M.update_scrollbar()
-      return
-    end
+--- Get the active diff window (whichever pane has focus, fallback to left).
+local function active_diff_win()
+  local cur = vim.api.nvim_get_current_win()
+  if cur == state.diff_right_win and win_valid(state.diff_right_win) then
+    return state.diff_right_win
   end
-  vim.api.nvim_win_set_cursor(state.diff_win, { state.change_starts[1], 0 })
-  vim.api.nvim_win_call(state.diff_win, function() vim.cmd("normal! zz") end)
+  if win_valid(state.diff_win) then return state.diff_win end
+  return nil
+end
+
+--- Jump both SBS panes to the given line.
+local function jump_diff_to(line_nr)
+  if win_valid(state.diff_win) then
+    pcall(vim.api.nvim_win_set_cursor, state.diff_win, { line_nr, 0 })
+    pcall(vim.api.nvim_win_call, state.diff_win, function() vim.cmd("normal! zz") end)
+  end
+  if state.sbs_mode and win_valid(state.diff_right_win) then
+    pcall(vim.api.nvim_win_set_cursor, state.diff_right_win, { line_nr, 0 })
+    pcall(vim.api.nvim_win_call, state.diff_right_win, function() vim.cmd("normal! zz") end)
+  end
   M.update_scrollbar()
 end
 
-function M.prev_change()
-  if not win_valid(state.diff_win) or #state.change_starts == 0 then return end
-  local cur = vim.api.nvim_win_get_cursor(state.diff_win)[1]
-  for i = #state.change_starts, 1, -1 do
-    if state.change_starts[i] < cur then
-      vim.api.nvim_win_set_cursor(state.diff_win, { state.change_starts[i], 0 })
-      vim.api.nvim_win_call(state.diff_win, function() vim.cmd("normal! zz") end)
-      M.update_scrollbar()
+function M.next_change()
+  local win = active_diff_win()
+  if not win or #state.change_starts == 0 then return end
+  local cur = vim.api.nvim_win_get_cursor(win)[1]
+  for _, line_nr in ipairs(state.change_starts) do
+    if line_nr > cur then
+      jump_diff_to(line_nr)
       return
     end
   end
-  vim.api.nvim_win_set_cursor(state.diff_win, { state.change_starts[#state.change_starts], 0 })
-  vim.api.nvim_win_call(state.diff_win, function() vim.cmd("normal! zz") end)
-  M.update_scrollbar()
+  -- Wrap to first
+  jump_diff_to(state.change_starts[1])
+end
+
+function M.prev_change()
+  local win = active_diff_win()
+  if not win or #state.change_starts == 0 then return end
+  local cur = vim.api.nvim_win_get_cursor(win)[1]
+  for i = #state.change_starts, 1, -1 do
+    if state.change_starts[i] < cur then
+      jump_diff_to(state.change_starts[i])
+      return
+    end
+  end
+  -- Wrap to last
+  jump_diff_to(state.change_starts[#state.change_starts])
 end
 
 return M
