@@ -29,6 +29,7 @@ local state = {
   prev_win = nil,
   prev_laststatus = nil,
   change_starts = {},
+  change_idx = 0, -- current index into change_starts
   change_lines_set = {}, -- line_nr -> "add" | "del"
   raw_diff_lines = {},
   last_diff_opts = nil,
@@ -957,6 +958,7 @@ function M.set_diff_lines(lines, opts)
 
     -- Track changes for scrollbar + navigation (use left pane rows)
     state.change_starts = {}
+    state.change_idx = 0
     state.change_lines_set = {}
     for i, lt in ipairs(lt_left) do
       if lt == "del" then state.change_lines_set[i] = "del" end
@@ -1054,6 +1056,7 @@ function M.set_diff_lines(lines, opts)
 
     -- Track changes + apply extmarks
     state.change_starts = {}
+    state.change_idx = 0
     state.change_lines_set = {}
 
     for i, lt in ipairs(line_types) do
@@ -1275,18 +1278,22 @@ function M.is_diff_win(win)
   return win == state.diff_win or win == state.diff_right_win
 end
 
---- Get the active diff window (whichever pane has focus, fallback to left).
+--- Get the active diff window (whichever diff pane has focus, or left pane as fallback).
 local function active_diff_win()
   local cur = vim.api.nvim_get_current_win()
   if cur == state.diff_right_win and win_valid(state.diff_right_win) then
     return state.diff_right_win
   end
+  -- Fallback to left pane regardless of current focus (e.g. from status panel)
   if win_valid(state.diff_win) then return state.diff_win end
+  if win_valid(state.diff_right_win) then return state.diff_right_win end
   return nil
 end
 
 --- Jump both SBS panes to the given line.
 local function jump_diff_to(line_nr)
+  -- Guard against scroll sync interfering during the jump
+  syncing_scroll = true
   if win_valid(state.diff_win) then
     pcall(vim.api.nvim_win_set_cursor, state.diff_win, { line_nr, 0 })
     pcall(vim.api.nvim_win_call, state.diff_win, function() vim.cmd("normal! zz") end)
@@ -1295,35 +1302,26 @@ local function jump_diff_to(line_nr)
     pcall(vim.api.nvim_win_set_cursor, state.diff_right_win, { line_nr, 0 })
     pcall(vim.api.nvim_win_call, state.diff_right_win, function() vim.cmd("normal! zz") end)
   end
+  syncing_scroll = false
   M.update_scrollbar()
 end
 
 function M.next_change()
-  local win = active_diff_win()
-  if not win or #state.change_starts == 0 then return end
-  local cur = vim.api.nvim_win_get_cursor(win)[1]
-  for _, line_nr in ipairs(state.change_starts) do
-    if line_nr > cur then
-      jump_diff_to(line_nr)
-      return
-    end
+  if #state.change_starts == 0 then return end
+  state.change_idx = state.change_idx + 1
+  if state.change_idx > #state.change_starts then
+    state.change_idx = 1
   end
-  -- Wrap to first
-  jump_diff_to(state.change_starts[1])
+  jump_diff_to(state.change_starts[state.change_idx])
 end
 
 function M.prev_change()
-  local win = active_diff_win()
-  if not win or #state.change_starts == 0 then return end
-  local cur = vim.api.nvim_win_get_cursor(win)[1]
-  for i = #state.change_starts, 1, -1 do
-    if state.change_starts[i] < cur then
-      jump_diff_to(state.change_starts[i])
-      return
-    end
+  if #state.change_starts == 0 then return end
+  state.change_idx = state.change_idx - 1
+  if state.change_idx < 1 then
+    state.change_idx = #state.change_starts
   end
-  -- Wrap to last
-  jump_diff_to(state.change_starts[#state.change_starts])
+  jump_diff_to(state.change_starts[state.change_idx])
 end
 
 return M

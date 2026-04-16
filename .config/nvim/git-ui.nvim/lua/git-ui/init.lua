@@ -59,6 +59,10 @@ local function setup_keymaps()
     end)
   end, "Unstage all")
 
+  -- Change navigation (works from any panel)
+  map("]c", function() ui.next_change() end, "Next change")
+  map("[c", function() ui.prev_change() end, "Previous change")
+
   -- Sidebar resize
   map("<", function()
     ui.resize_status(-3)
