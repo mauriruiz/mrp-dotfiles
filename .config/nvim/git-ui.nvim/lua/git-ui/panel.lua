@@ -4,10 +4,19 @@ local git = require("git-ui.git")
 local ui = require("git-ui.ui")
 local config = require("git-ui.config")
 
---- Notify that works with cmdheight=0 by forcing a redraw.
+--- Notify that works with cmdheight=0 by temporarily showing the cmdline.
 local function notify(msg, level)
-  vim.api.nvim_notify(msg, level or vim.log.levels.INFO, {})
-  vim.cmd("redraw")
+  level = level or vim.log.levels.INFO
+  local hl = "Normal"
+  if level == vim.log.levels.ERROR then hl = "ErrorMsg"
+  elseif level == vim.log.levels.WARN then hl = "WarningMsg" end
+  -- Temporarily set cmdheight=1 so the message is visible
+  local prev = vim.o.cmdheight
+  if prev == 0 then vim.o.cmdheight = 1 end
+  vim.api.nvim_echo({{ msg, hl }}, true, {})
+  if prev == 0 then
+    vim.defer_fn(function() vim.o.cmdheight = 0 end, 2000)
+  end
 end
 
 local state = {
