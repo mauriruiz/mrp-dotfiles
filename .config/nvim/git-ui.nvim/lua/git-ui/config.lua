@@ -25,7 +25,7 @@ M.defaults = {
     conflict_redo = "<C-r>",
   },
   layout = {
-    status_width = 42,
+    status_width = 32,
     side_by_side_min_width = 120, -- min diff area width to activate SBS
   },
   icons = {

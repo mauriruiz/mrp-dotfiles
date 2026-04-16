@@ -142,6 +142,7 @@ function M.open()
   setup_keymaps()
   setup_diff_keymaps()
   ui.setup_scroll_sync()
+  ui.setup_mouse_resize()
 
   -- Global scroll tracking for scrollbar (cleaned up on close)
   local augroup = vim.api.nvim_create_augroup("git-ui-scroll", { clear = true })
@@ -161,6 +162,10 @@ end
 
 function M.close()
   pcall(vim.api.nvim_del_augroup_by_name, "git-ui-scroll")
+  -- Remove global mouse resize keymaps
+  pcall(vim.keymap.del, "n", "<LeftMouse>")
+  pcall(vim.keymap.del, "n", "<LeftDrag>")
+  pcall(vim.keymap.del, "n", "<LeftRelease>")
   ui.close()
 end
 

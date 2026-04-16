@@ -24,6 +24,7 @@ local state = {
   scrollbar_buf = nil,
   scrollbar_win = nil,
   sbs_mode = false,
+  sbs_left_ratio = 0.5, -- fraction of diff area for left pane
   is_open = false,
   prev_win = nil,
   prev_laststatus = nil,
@@ -135,7 +136,7 @@ function M.open(status_width)
   if state.sbs_mode then
     -- Side-by-side: left pane (old/del) + divider + right pane (new/add)
     local divider_width = 1
-    local left_width = math.floor((diff_width - divider_width) / 2)
+    local left_width = math.floor((diff_width - divider_width) * state.sbs_left_ratio)
     local right_width = diff_width - divider_width - left_width
 
     state.diff_win = vim.api.nvim_open_win(state.diff_buf, false, {
@@ -254,6 +255,7 @@ function M.close()
   state.scrollbar_buf = nil
   state.scrollbar_win = nil
   state.sbs_mode = false
+  state.sbs_left_ratio = 0.5
   pcall(vim.api.nvim_del_augroup_by_name, "git-ui-sbs-sync")
 end
 
@@ -377,7 +379,7 @@ function M.resize_status(delta)
 
   if state.sbs_mode then
     local divider_width = 1
-    local left_w = math.floor((diff_w - divider_width) / 2)
+    local left_w = math.floor((diff_w - divider_width) * state.sbs_left_ratio)
     local right_w = diff_w - divider_width - left_w
     if win_valid(state.diff_win) then
       pcall(vim.api.nvim_win_set_config, state.diff_win, {
@@ -412,6 +414,114 @@ function M.resize_status(delta)
       relative = "editor", row = 0, col = new_w + diff_w, width = scrollbar_width, height = diff_content_height,
     })
   end
+end
+
+---------------------------------------------------------------------------
+-- Mouse drag resize
+---------------------------------------------------------------------------
+
+function M.setup_mouse_resize()
+  local panel = require("git-ui.panel")
+
+  -- Sidebar drag: left-drag anywhere on the divider column or nearby
+  -- We use a global mouse handler that checks the column position
+  local dragging = nil -- "sidebar" | "sbs_divider" | nil
+
+  local function get_sidebar_col()
+    return require("git-ui.config").options.layout.status_width
+  end
+
+  local function get_divider_col()
+    if not state.sbs_mode then return nil end
+    local cfg = require("git-ui.config")
+    local sw = cfg.options.layout.status_width
+    local editor_width = vim.o.columns
+    local scrollbar_width = 2
+    local diff_w = math.max(1, editor_width - sw - scrollbar_width)
+    local divider_width = 1
+    local left_w = math.floor((diff_w - divider_width) * state.sbs_left_ratio)
+    return sw + left_w
+  end
+
+  -- On mouse click, determine if we're on a resize handle
+  vim.keymap.set("n", "<LeftMouse>", function()
+    -- Execute default click first to position cursor
+    vim.cmd("normal! \\<LeftMouse>")
+    local mouse_col = vim.fn.getmousepos().screencol
+    local sidebar_col = get_sidebar_col()
+
+    if math.abs(mouse_col - sidebar_col) <= 1 then
+      dragging = "sidebar"
+    elseif state.sbs_mode then
+      local div_col = get_divider_col()
+      if div_col and math.abs(mouse_col - div_col) <= 1 then
+        dragging = "sbs_divider"
+      end
+    end
+  end, { silent = true })
+
+  vim.keymap.set("n", "<LeftDrag>", function()
+    if not dragging or not state.is_open then return end
+    local mouse_col = vim.fn.getmousepos().screencol
+    local cfg = require("git-ui.config")
+
+    if dragging == "sidebar" then
+      local min_w = 20
+      local max_w = math.floor(vim.o.columns * 0.6)
+      local new_w = math.max(min_w, math.min(max_w, mouse_col))
+      local cur_w = cfg.options.layout.status_width
+      if new_w ~= cur_w then
+        local delta = new_w - cur_w
+        M.resize_status(delta)
+        panel.render()
+        panel.render_help()
+      end
+    elseif dragging == "sbs_divider" and state.sbs_mode then
+      -- Resize left/right diff split
+      local sw = cfg.options.layout.status_width
+      local editor_width = vim.o.columns
+      local scrollbar_width = 2
+      local diff_w = math.max(1, editor_width - sw - scrollbar_width)
+      local divider_width = 1
+
+      -- mouse_col relative to diff area start
+      local rel_col = mouse_col - sw
+      local usable = diff_w - divider_width
+      local min_pane = 10
+      local left_w = math.max(min_pane, math.min(usable - min_pane, rel_col))
+      local right_w = usable - left_w
+
+      -- Store ratio so future re-layouts preserve it
+      state.sbs_left_ratio = left_w / usable
+
+      local tabline = (vim.o.showtabline == 0) and 0
+        or (vim.o.showtabline == 1 and vim.fn.tabpagenr("$") == 1) and 0
+        or 1
+      local editor_height = vim.o.lines - tabline - vim.o.cmdheight
+      local diff_content_height = editor_height - 1 -- diffbar
+
+      if win_valid(state.diff_win) then
+        pcall(vim.api.nvim_win_set_config, state.diff_win, {
+          relative = "editor", row = 0, col = sw, width = left_w, height = diff_content_height,
+        })
+      end
+      if win_valid(state.divider_win) then
+        pcall(vim.api.nvim_win_set_config, state.divider_win, {
+          relative = "editor", row = 0, col = sw + left_w, width = divider_width, height = diff_content_height,
+        })
+      end
+      if win_valid(state.diff_right_win) then
+        pcall(vim.api.nvim_win_set_config, state.diff_right_win, {
+          relative = "editor", row = 0, col = sw + left_w + divider_width, width = right_w, height = diff_content_height,
+        })
+      end
+    end
+  end, { silent = true })
+
+  vim.keymap.set("n", "<LeftRelease>", function()
+    dragging = nil
+    vim.cmd("normal! \\<LeftRelease>")
+  end, { silent = true })
 end
 
 ---------------------------------------------------------------------------
