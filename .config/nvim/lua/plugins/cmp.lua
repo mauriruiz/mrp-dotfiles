@@ -1,5 +1,6 @@
 return {
     "hrsh7th/nvim-cmp",
+    event = "InsertEnter",
     dependencies = {
         "hrsh7th/cmp-nvim-lsp", -- cmp_nvim_lsp
         "onsails/lspkind-nvim", -- lspkind (VS pictograms)

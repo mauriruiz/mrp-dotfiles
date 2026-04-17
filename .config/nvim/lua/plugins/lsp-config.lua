@@ -2,6 +2,7 @@ return {
   -- Mason: install binaries LSP
   {
     "williamboman/mason.nvim",
+    cmd = { "Mason", "MasonInstall", "MasonUpdate", "MasonUninstall" },
     config = function()
       require("mason").setup()
     end,
@@ -10,6 +11,8 @@ return {
   -- Mason bridge
   {
     "williamboman/mason-lspconfig.nvim",
+    event = { "BufReadPre", "BufNewFile" },
+    dependencies = { "williamboman/mason.nvim" },
     config = function()
       require("mason-lspconfig").setup({
         ensure_installed = {
@@ -39,6 +42,7 @@ return {
   -- LSP core (API nueva Neovim 0.11)
   {
     "neovim/nvim-lspconfig",
+    event = { "BufReadPre", "BufNewFile" },
     config = function()
       -- Lua
       vim.lsp.config.lua_ls = {

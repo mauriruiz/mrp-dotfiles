@@ -1,5 +1,7 @@
 return {
   "stevearc/conform.nvim",
+  event = "BufWritePre",
+  cmd = { "ConformInfo", "Format" },
   opts = function(_, opts)
     opts.default_format_opts = opts.default_format_opts or {}
     opts.default_format_opts.lsp_format = "never"

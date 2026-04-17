@@ -1,6 +1,14 @@
 return {
   "akinsho/toggleterm.nvim",
   version = "*",
+  cmd = { "ToggleTerm", "TermExec" },
+  keys = {
+    { [[<c-\>]], desc = "Toggle terminal" },
+    { "<leader>ta", desc = "Claude Code" },
+    { "<leader>t1", desc = "Vertical terminal" },
+    { "<leader>t2", desc = "Horizontal terminal" },
+    { "<leader>tf", desc = "Floating terminal" },
+  },
   opts = {
     open_mapping = [[<c-\>]],
     direction = "vertical",
@@ -32,12 +40,6 @@ return {
         vim.keymap.set("t", "<C-l>", [[<C-\><C-n><C-w>l]], opts)
       end,
     })
-
-    -- Split navigation from normal mode
-    vim.keymap.set("n", "<C-h>", "<C-w>h", { silent = true })
-    vim.keymap.set("n", "<C-j>", "<C-w>j", { silent = true })
-    vim.keymap.set("n", "<C-k>", "<C-w>k", { silent = true })
-    vim.keymap.set("n", "<C-l>", "<C-w>l", { silent = true })
 
     local Terminal = require("toggleterm.terminal").Terminal
 
