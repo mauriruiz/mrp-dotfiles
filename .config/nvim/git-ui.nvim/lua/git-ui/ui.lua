@@ -795,7 +795,10 @@ function M.set_diff_lines(lines, opts)
   -- Temporary hunk index map (unified display row -> hunk idx)
   local unified_hunk_map = {}
 
-  if opts.conflict then
+  if opts.raw then
+    display = lines
+    for i = 1, #display do line_types[i] = "context" end
+  elseif opts.conflict then
     display = lines
     local hint_lines = opts.hint_lines or 0
     local block = nil

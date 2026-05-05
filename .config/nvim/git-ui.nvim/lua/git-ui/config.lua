@@ -23,6 +23,12 @@ M.defaults = {
     focus_diff = "<Tab>",
     conflict_undo = "u",
     conflict_redo = "<C-r>",
+    log = "l",
+    drill_out = "<BS>",
+  },
+  log = {
+    limit = 300,
+    show_all_branches = false,
   },
   layout = {
     status_width = 32,

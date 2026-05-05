@@ -42,10 +42,12 @@ local function setup_keymaps()
   map(km.pull, panel.do_pull, "Pull")
   map(km.branch, panel.show_branches, "Switch branch")
   map(km.new_branch, panel.create_branch, "Create branch")
-  map(km.refresh, function() panel.refresh() end, "Refresh")
+  map(km.refresh, function() panel.refresh_current() end, "Refresh")
   map(km.close, function() M.close() end, "Close")
   map("<Esc>", function() M.close() end, "Close")
-  map(km.toggle_section, panel.toggle_section, "Toggle section")
+  map(km.toggle_section, function() panel.on_enter() end, "Enter / toggle / drill")
+  map(km.log, function() panel.show_log() end, "History (commit log)")
+  map(km.drill_out, function() panel.drill_out() end, "Back")
 
   -- Stage all / Unstage all
   map("S", function()
@@ -89,7 +91,7 @@ local function setup_keymaps()
       timer = vim.fn.timer_start(50, function()
         vim.schedule(function()
           timer = nil
-          panel.update_diff_for_cursor()
+          panel.update_diff_dispatcher()
         end)
       end)
     end,
