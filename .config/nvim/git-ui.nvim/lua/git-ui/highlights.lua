@@ -67,6 +67,16 @@ function M.setup()
   hl(0, "GitUICommitCounterWarn", { fg = "#fc9867" })
   hl(0, "GitUICommitCounterOver", { fg = "#ff6188", bold = true })
 
+  -- Log view
+  hl(0, "GitUILogGraph",   { fg = "#727072" })
+  hl(0, "GitUILogHash",    { fg = "#ffd866" })
+  hl(0, "GitUILogSubject", { fg = "#fcfcfa" })
+  hl(0, "GitUILogAuthor",  { fg = "#ab9df2" })
+  hl(0, "GitUILogDate",    { fg = "#5b595c", italic = true })
+  hl(0, "GitUILogRefs",    { fg = "#78dce8", bold = true })
+  hl(0, "GitUILogHead",    { fg = "#a9dc76", bold = true })
+  hl(0, "GitUILogModeBar", { fg = "#ab9df2", bold = true })
+
   -- Scrollbar
   hl(0, "GitUIScrollTrack", { bg = "#221f22" })
   hl(0, "GitUIScrollVP", { bg = "#403e41" })

@@ -389,6 +389,87 @@ function M.create_branch(name, callback)
   end)
 end
 
+--- Fetch commit log with graph.
+---@param opts table { limit = number, all = boolean }
+---@param callback fun(commits: table[]) each: { graph, hash, short, subject, author, date, refs }
+function M.log(opts, callback)
+  opts = opts or {}
+  local args = {
+    "log",
+    "--graph",
+    "--date-order",
+    "--pretty=format:%H%x00%h%x00%s%x00%an%x00%ar%x00%D",
+    "-n", tostring(opts.limit or 300),
+  }
+  if opts.all then table.insert(args, "--all") end
+
+  run(args, function(ok, stdout)
+    if not ok then callback({}); return end
+    local commits = {}
+    for line in stdout:gmatch("[^\n]+") do
+      local nul_pos = line:find("\0", 1, true)
+      if nul_pos then
+        local prefix_hash = line:sub(1, nul_pos - 1)
+        local rest = line:sub(nul_pos + 1)
+        local fields = vim.split(rest, "\0", { plain = true })
+        local graph, full_hash = prefix_hash:match("^(.-)([0-9a-f]+)$")
+        table.insert(commits, {
+          graph = graph or "",
+          hash = full_hash or "",
+          short = fields[1] or "",
+          subject = fields[2] or "",
+          author = fields[3] or "",
+          date = fields[4] or "",
+          refs = fields[5] or "",
+        })
+      else
+        -- Pure graph line (merge connectors with no commit)
+        table.insert(commits, { graph = line, hash = nil })
+      end
+    end
+    callback(commits)
+  end)
+end
+
+--- Files changed in a commit.
+function M.commit_files(hash, callback)
+  run({ "show", "--name-status", "--pretty=format:", "--no-color", hash }, function(ok, stdout)
+    if not ok then callback({}); return end
+    local files = {}
+    for line in stdout:gmatch("[^\n]+") do
+      local parts = vim.split(line, "\t", { plain = true })
+      if #parts >= 2 then
+        local s = parts[1]:sub(1, 1) -- M, A, D, R, C, T, U
+        -- Renames/copies have 3 fields: STATUS<tab>old_path<tab>new_path
+        local p = parts[#parts]
+        table.insert(files, { status = s, path = p, raw = parts[1] })
+      end
+    end
+    callback(files)
+  end)
+end
+
+--- Full commit diff (stat + patch).
+function M.commit_show(hash, callback)
+  run({ "show", "--no-color", "--stat", hash }, function(ok, stdout)
+    callback(ok and stdout or "")
+  end)
+end
+
+--- Commit metadata (header block).
+function M.commit_meta(hash, callback)
+  run({ "show", "--no-patch", "--pretty=format:%H%n%an <%ae>%n%ad%n%n%s%n%n%b", "--date=iso", hash }, function(ok, stdout)
+    callback(ok and stdout or "")
+  end)
+end
+
+--- Per-file diff inside a commit.
+function M.commit_file_diff(hash, path, callback)
+  run({ "show", "--no-color", "-U999999", hash, "--", path }, function(ok, stdout)
+    callback(ok and stdout or "")
+  end)
+end
+
 function M.stage_hunk(patch, callback)
   local cwd = vim.fn.getcwd()
   vim.system(

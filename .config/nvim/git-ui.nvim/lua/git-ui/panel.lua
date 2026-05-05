@@ -20,6 +20,7 @@ local function notify(msg, level)
 end
 
 local state = {
+  mode = "status", -- "status" | "log" | "log_files"
   files = { conflicted = {}, staged = {}, changed = {}, untracked = {} },
   branch = { name = "", ahead = 0, behind = 0 },
   sections = {
@@ -31,6 +32,12 @@ local state = {
   line_map = {},
   loading = false,
   conflict_history = {}, -- { [path] = { undo = {lines, ...}, redo = {lines, ...} } }
+  log = {
+    commits = {},        -- { graph, hash, short, subject, author, date, refs }
+    selected = nil,      -- index of commit drilled into (log_files mode)
+    files = {},          -- files of selected commit
+    loading = false,
+  },
 }
 
 function M.get_state()
@@ -318,6 +325,12 @@ end
 
 --- Refresh git status and branch info, then re-render.
 function M.refresh(callback)
+  if state.mode ~= "status" then
+    -- Don't render status into log buffer; redirect to current mode.
+    if state.mode == "log" then M.show_log() end
+    if callback then callback() end
+    return
+  end
   if state.loading then return end
   state.loading = true
 
@@ -919,6 +932,436 @@ function M.unstage_hunk()
       notify("Unstage hunk failed: " .. err, vim.log.levels.ERROR)
     end
   end)
+end
+
+---------------------------------------------------------------------------
+-- Log view
+---------------------------------------------------------------------------
+
+local function render_log()
+  local lines = {}
+  local highlights = {}
+  local line_map = {}
+  local width = config.options.layout.status_width
+
+  -- Mode indicator
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  local title = "  HISTORY"
+  table.insert(lines, title)
+  table.insert(highlights, { group = "GitUILogModeBar", line = #lines - 1 })
+  line_map[#lines] = { type = "header" }
+
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  if state.log.loading then
+    table.insert(lines, "  Loading commits...")
+    table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+  elseif #state.log.commits == 0 then
+    table.insert(lines, "  No commits")
+    table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+  else
+    for i, c in ipairs(state.log.commits) do
+      if c.hash then
+        local graph = c.graph or ""
+        -- Line 1: graph + short hash + subject
+        local prefix = "  " .. graph
+        local line1 = prefix .. c.short .. " " .. c.subject
+        local max_w = math.max(20, width - 2)
+        if vim.fn.strdisplaywidth(line1) > max_w then
+          line1 = vim.fn.strcharpart(line1, 0, max_w - 1) .. "…"
+        end
+        table.insert(lines, line1)
+        line_map[#lines] = { type = "commit", index = i, commit = c }
+
+        -- Highlight ranges (col counts in bytes; our chars are ASCII here)
+        local graph_end = #prefix
+        local hash_end = graph_end + #c.short
+        if #graph > 0 then
+          table.insert(highlights, {
+            group = "GitUILogGraph", line = #lines - 1,
+            col_start = 2, col_end = graph_end,
+          })
+        end
+        table.insert(highlights, {
+          group = "GitUILogHash", line = #lines - 1,
+          col_start = graph_end, col_end = hash_end,
+        })
+        table.insert(highlights, {
+          group = "GitUILogSubject", line = #lines - 1,
+          col_start = hash_end, col_end = -1,
+        })
+
+        -- Line 2: refs + author · date
+        local refs_part = ""
+        if c.refs and c.refs ~= "" then
+          refs_part = c.refs
+        end
+        local meta = string.format("%s · %s", c.author, c.date)
+        local line2_prefix = "       "
+        local sub_line
+        if refs_part ~= "" then
+          sub_line = line2_prefix .. refs_part .. "  " .. meta
+        else
+          sub_line = line2_prefix .. meta
+        end
+        local max_w2 = math.max(10, width - #line2_prefix - 1)
+        local visible = sub_line:sub(#line2_prefix + 1)
+        if vim.fn.strdisplaywidth(visible) > max_w2 then
+          visible = vim.fn.strcharpart(visible, 0, max_w2 - 1) .. "…"
+          sub_line = line2_prefix .. visible
+        end
+        table.insert(lines, sub_line)
+        line_map[#lines] = { type = "commit", index = i, commit = c }
+
+        if refs_part ~= "" then
+          local refs_start = #line2_prefix
+          local refs_end = refs_start + #refs_part
+          table.insert(highlights, {
+            group = "GitUILogRefs", line = #lines - 1,
+            col_start = refs_start, col_end = math.min(refs_end, #sub_line),
+          })
+        end
+        table.insert(highlights, {
+          group = "GitUILogDate", line = #lines - 1,
+          col_start = #sub_line - math.min(#meta, #sub_line - #line2_prefix),
+          col_end = -1,
+        })
+      else
+        -- Pure graph connector line (no commit)
+        local g = "  " .. (c.graph or "")
+        table.insert(lines, g)
+        table.insert(highlights, { group = "GitUILogGraph", line = #lines - 1 })
+        line_map[#lines] = { type = "blank" }
+      end
+    end
+  end
+
+  state.line_map = line_map
+  ui.set_status_lines(lines, highlights)
+end
+
+local function render_log_files()
+  local lines = {}
+  local highlights = {}
+  local line_map = {}
+  local icons = config.options.icons
+  local commit = state.log.commits[state.log.selected]
+
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  local title = "  COMMIT " .. (commit and commit.short or "")
+  table.insert(lines, title)
+  table.insert(highlights, { group = "GitUILogModeBar", line = #lines - 1 })
+  line_map[#lines] = { type = "header" }
+
+  if commit and commit.subject ~= "" then
+    local sub = "  " .. commit.subject
+    local max_w = math.max(20, config.options.layout.status_width - 2)
+    if vim.fn.strdisplaywidth(sub) > max_w then
+      sub = vim.fn.strcharpart(sub, 0, max_w - 1) .. "…"
+    end
+    table.insert(lines, sub)
+    table.insert(highlights, { group = "GitUILogSubject", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+  end
+
+  table.insert(lines, "")
+  line_map[#lines] = { type = "blank" }
+
+  if state.log.loading then
+    table.insert(lines, "  Loading files...")
+    table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+  elseif #state.log.files == 0 then
+    table.insert(lines, "  No files")
+    table.insert(highlights, { group = "GitUIClean", line = #lines - 1 })
+    line_map[#lines] = { type = "info" }
+  else
+    local label = "  FILES"
+    table.insert(lines, label)
+    table.insert(highlights, { group = "GitUISectionHeader", line = #lines - 1 })
+    line_map[#lines] = { type = "header" }
+
+    for i, f in ipairs(state.log.files) do
+      local si_map = {
+        M = icons.modified, A = icons.added, D = icons.deleted,
+        R = icons.renamed, C = icons.renamed,
+      }
+      local si = si_map[f.status] or f.status
+      local hl_map = {
+        M = "GitUIModified", A = "GitUIStaged", D = "GitUIDeleted",
+        R = "GitUIRenamed", C = "GitUIRenamed",
+      }
+      local dir, fname = f.path:match("^(.+/)([^/]+)$")
+      if not dir then fname = f.path end
+
+      local line1 = string.format("    %s %s", si, fname)
+      table.insert(lines, line1)
+      line_map[#lines] = { type = "log_file", index = i, file = f }
+      table.insert(highlights, {
+        group = hl_map[f.status] or "Normal", line = #lines - 1,
+        col_start = 4, col_end = 4 + #si,
+      })
+      table.insert(highlights, {
+        group = "GitUIFileName", line = #lines - 1,
+        col_start = 4 + #si + 1, col_end = -1,
+      })
+
+      if dir then
+        local dir_disp = dir:sub(1, -2)
+        local prefix = "       "
+        local max_w = math.max(4, config.options.layout.status_width - #prefix)
+        if #dir_disp > max_w then
+          local parts = vim.split(dir_disp, "/", { plain = true })
+          local ok = false
+          for pi = 2, #parts do
+            local cand = "…/" .. table.concat(parts, "/", pi)
+            if #cand <= max_w then dir_disp = cand; ok = true; break end
+          end
+          if not ok then dir_disp = "…" .. dir_disp:sub(#dir_disp - max_w + 2) end
+        end
+        local line2 = prefix .. dir_disp
+        table.insert(lines, line2)
+        table.insert(highlights, { group = "GitUIFilePath", line = #lines - 1 })
+        line_map[#lines] = { type = "log_file", index = i, file = f }
+      end
+    end
+  end
+
+  state.line_map = line_map
+  ui.set_status_lines(lines, highlights)
+end
+
+local function render_log_help()
+  local width = config.options.layout.status_width
+  local lines = {}
+  local highlights = {}
+
+  table.insert(lines, "  " .. string.rep("─", width - 4))
+  table.insert(highlights, { group = "GitUISeparator", line = #lines - 1 })
+
+  local rows
+  if state.mode == "log" then
+    rows = {
+      { { "j/k", "move" },     { "CR", "drill in" } },
+      { { "BS", "back" },      { "Tab", "diff" } },
+      { { "r", "refresh" },    { "q", "close" } },
+    }
+  else -- log_files
+    rows = {
+      { { "j/k", "move" },     { "CR", "view diff" } },
+      { { "BS", "back" },      { "Tab", "diff" } },
+      { { "q", "close" } },
+    }
+  end
+
+  local cell_w = math.floor((width - 3) / 3)
+  for _, row in ipairs(rows) do
+    local line_str = "   "
+    local key_ranges, desc_ranges = {}, {}
+    local col = 3
+    for _, item in ipairs(row) do
+      local key, desc = item[1], item[2]
+      local cell = key .. " " .. desc
+      local pad = math.max(0, cell_w - #cell)
+      line_str = line_str .. cell .. string.rep(" ", pad)
+      table.insert(key_ranges, { s = col, e = col + #key })
+      table.insert(desc_ranges, { s = col + #key + 1, e = col + #key + 1 + #desc })
+      col = col + cell_w
+    end
+    table.insert(lines, line_str)
+    for _, kr in ipairs(key_ranges) do
+      table.insert(highlights, {
+        group = "GitUIHelpKey", line = #lines - 1,
+        col_start = kr.s, col_end = kr.e,
+      })
+    end
+    for _, dr in ipairs(desc_ranges) do
+      table.insert(highlights, {
+        group = "GitUIHelpText", line = #lines - 1,
+        col_start = dr.s, col_end = dr.e,
+      })
+    end
+  end
+
+  ui.set_help_lines(lines, highlights)
+end
+
+--- Update diff panel based on cursor in log/log_files mode.
+function M.update_log_diff_for_cursor()
+  local item = M.get_item_at_cursor()
+  if not item then
+    ui.set_diff_lines({ "", "  Move cursor onto a commit" })
+    ui.set_diff_statusline(nil)
+    return
+  end
+
+  if state.mode == "log" and item.type == "commit" then
+    local commit = item.commit
+    ui.set_diff_statusline(commit.short .. "  " .. commit.subject)
+    git.commit_meta(commit.hash, function(meta)
+      git.commit_show(commit.hash, function(diff)
+        local out = {}
+        if meta and meta ~= "" then
+          for ml in (meta .. "\n"):gmatch("([^\n]*)\n") do
+            table.insert(out, ml)
+          end
+          table.insert(out, "")
+        end
+        if diff and diff ~= "" then
+          for dl in (diff .. "\n"):gmatch("([^\n]*)\n") do
+            table.insert(out, dl)
+          end
+        end
+        if #out == 0 then out = { "", "  (empty commit)" } end
+        ui.set_diff_lines(out, { raw = true })
+      end)
+    end)
+  elseif state.mode == "log_files" and item.type == "log_file" then
+    local commit = state.log.commits[state.log.selected]
+    if not commit then return end
+    ui.set_diff_statusline(commit.short .. "  " .. item.file.path)
+    git.commit_file_diff(commit.hash, item.file.path, function(diff)
+      if not diff or diff == "" then
+        ui.set_diff_lines({ "", "  No diff available" })
+        return
+      end
+      ui.set_diff_lines(vim.split(diff, "\n"))
+    end)
+  else
+    ui.set_diff_lines({ "", "  " })
+    ui.set_diff_statusline(nil)
+  end
+end
+
+--- Switch to log mode and load commits.
+function M.show_log()
+  state.mode = "log"
+  state.log.loading = true
+  render_log()
+  render_log_help()
+  ui.set_diff_lines({ "", "  Loading commits..." })
+  ui.set_diff_statusline(nil)
+
+  git.log({
+    limit = config.options.log.limit,
+    all = config.options.log.show_all_branches,
+  }, function(commits)
+    state.log.commits = commits
+    state.log.loading = false
+    render_log()
+    render_log_help()
+
+    -- Move cursor to first commit
+    local ui_state = ui.get_state()
+    if ui_state.status_win and vim.api.nvim_win_is_valid(ui_state.status_win) then
+      for line_nr, item in pairs(state.line_map) do
+        if item.type == "commit" then
+          pcall(vim.api.nvim_win_set_cursor, ui_state.status_win, { line_nr, 0 })
+          break
+        end
+      end
+    end
+    M.update_log_diff_for_cursor()
+  end)
+end
+
+--- Switch back to status mode.
+function M.show_status()
+  state.mode = "status"
+  state.log.selected = nil
+  state.log.files = {}
+  M.refresh(function()
+    cursor_to_first_file()
+  end)
+end
+
+--- Drill into the commit at cursor: load files, show file list.
+function M.log_drill_in()
+  local item = M.get_item_at_cursor()
+  if not item or item.type ~= "commit" then return end
+  state.log.selected = item.index
+  state.log.loading = true
+  state.mode = "log_files"
+  render_log_files()
+  render_log_help()
+  git.commit_files(item.commit.hash, function(files)
+    state.log.files = files
+    state.log.loading = false
+    render_log_files()
+
+    local ui_state = ui.get_state()
+    if ui_state.status_win and vim.api.nvim_win_is_valid(ui_state.status_win) then
+      for line_nr, lm in pairs(state.line_map) do
+        if lm.type == "log_file" then
+          pcall(vim.api.nvim_win_set_cursor, ui_state.status_win, { line_nr, 0 })
+          break
+        end
+      end
+    end
+    M.update_log_diff_for_cursor()
+  end)
+end
+
+--- Back navigation: log_files → log → status.
+function M.drill_out()
+  if state.mode == "log_files" then
+    state.mode = "log"
+    state.log.selected = nil
+    state.log.files = {}
+    render_log()
+    render_log_help()
+
+    -- Restore cursor to the commit we drilled into (best effort)
+    local ui_state = ui.get_state()
+    if ui_state.status_win and vim.api.nvim_win_is_valid(ui_state.status_win) then
+      for line_nr, lm in pairs(state.line_map) do
+        if lm.type == "commit" then
+          pcall(vim.api.nvim_win_set_cursor, ui_state.status_win, { line_nr, 0 })
+          break
+        end
+      end
+    end
+    M.update_log_diff_for_cursor()
+  elseif state.mode == "log" then
+    M.show_status()
+  end
+end
+
+--- Dispatcher for <CR> based on mode.
+function M.on_enter()
+  if state.mode == "status" then
+    M.toggle_section()
+  elseif state.mode == "log" then
+    M.log_drill_in()
+  elseif state.mode == "log_files" then
+    -- Already viewing diff via cursor; <CR> focuses diff panel
+    ui.focus_diff()
+  end
+end
+
+--- Dispatcher for refresh based on mode.
+function M.refresh_current()
+  if state.mode == "log" then
+    M.show_log()
+  else
+    M.refresh()
+  end
+end
+
+--- Cursor-move dispatcher: route to status diff or log diff.
+function M.update_diff_dispatcher()
+  if state.mode == "status" then
+    M.update_diff_for_cursor()
+  else
+    M.update_log_diff_for_cursor()
+  end
 end
 
 -- expose for init
