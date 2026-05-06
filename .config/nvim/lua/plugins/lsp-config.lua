@@ -1,72 +1,53 @@
 return {
-  -- Mason: install binaries LSP
+  -- Mason: install LSP/DAP/formatter binaries on demand.
   {
     "williamboman/mason.nvim",
-    cmd = { "Mason", "MasonInstall", "MasonUpdate", "MasonUninstall" },
-    config = function()
-      require("mason").setup()
-    end,
+    cmd = { "Mason", "MasonInstall", "MasonUpdate", "MasonUninstall", "MasonLog" },
+    opts = {},
   },
 
-  -- Mason bridge
+  -- Mason ↔ lspconfig bridge: ensures servers are installed before LSP attaches.
   {
     "williamboman/mason-lspconfig.nvim",
     event = { "BufReadPre", "BufNewFile" },
     dependencies = { "williamboman/mason.nvim" },
-    config = function()
-      require("mason-lspconfig").setup({
-        ensure_installed = {
-          "lua_ls",
-          "gopls",
-          "rust_analyzer",
-          "ts_ls",
-
-          -- HTML / CSS
-          "html",
-          "cssls",
-          "emmet_ls",
-
-          -- JSON
-          "jsonls",
-
-          -- C#
-          "omnisharp",
-
-          -- Markdown
-          "marksman",
-        },
-      })
-    end,
+    opts = {
+      ensure_installed = {
+        "lua_ls", "gopls", "ts_ls",
+        "html", "cssls", "emmet_ls",
+        "jsonls", "omnisharp", "marksman",
+      },
+      -- rustaceanvim owns the rust client; suppress mason-lspconfig auto-enable
+      -- so we don't end up with two rust-analyzer instances per buffer.
+      automatic_enable = { exclude = { "rust_analyzer" } },
+    },
   },
 
-  -- LSP core (API nueva Neovim 0.11)
+  -- LSP core (Neovim 0.11 native API).
   {
     "neovim/nvim-lspconfig",
     event = { "BufReadPre", "BufNewFile" },
+    dependencies = { "hrsh7th/cmp-nvim-lsp" },
     config = function()
-      -- Lua
+      local capabilities = vim.tbl_deep_extend(
+        "force",
+        vim.lsp.protocol.make_client_capabilities(),
+        require("cmp_nvim_lsp").default_capabilities()
+      )
+
+      -- Apply capabilities to every server config registered via vim.lsp.config.
+      vim.lsp.config("*", { capabilities = capabilities })
+
       vim.lsp.config.lua_ls = {
         settings = {
           Lua = {
             diagnostics = { globals = { "vim" } },
             semantic = { enable = true },
+            workspace = { checkThirdParty = false },
           },
         },
       }
 
-      -- Rust
-      vim.lsp.config.rust_analyzer = {
-        settings = {
-          ["rust-analyzer"] = {
-            semanticHighlighting = {
-              punctuation = { enable = true },
-              operator = { specialization = { enable = true } },
-            },
-          },
-        },
-      }
-
-      -- TypeScript — semantic tokens on by default, enable inlay hints
       vim.lsp.config.ts_ls = {
         settings = {
           typescript = { suggest = { completeFunctionCalls = true } },
@@ -74,7 +55,6 @@ return {
         },
       }
 
-      -- Go
       vim.lsp.config.gopls = {
         settings = {
           gopls = {
@@ -85,31 +65,37 @@ return {
         },
       }
 
-      -- C#
       vim.lsp.config.omnisharp = {
         cmd = { "omnisharp", "--languageserver", "--hostPID", tostring(vim.fn.getpid()) },
       }
 
-      -- Enable servers
-      vim.lsp.enable("omnisharp")
-      vim.lsp.enable("lua_ls")
-      vim.lsp.enable("gopls")
-      vim.lsp.enable("rust_analyzer")
-      vim.lsp.enable("ts_ls")
-      vim.lsp.enable("html")
-      vim.lsp.enable("cssls")
-      vim.lsp.enable("emmet_ls")
-      vim.lsp.enable("jsonls")
-      vim.lsp.enable("marksman")
+      for _, server in ipairs({
+        "lua_ls", "gopls", "ts_ls",
+        "html", "cssls", "emmet_ls",
+        "jsonls", "omnisharp", "marksman",
+      }) do
+        vim.lsp.enable(server)
+      end
 
-      -- Keymaps
-      vim.keymap.set("n", "K", vim.lsp.buf.hover)
-      vim.keymap.set("n", "gd", vim.lsp.buf.definition)
-      vim.keymap.set("n", "gr", function()
-        require("telescope.builtin").lsp_references()
-      end, { desc = "Go to references (Telescope)" })
-      vim.keymap.set({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action)
-      vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float)
+      -- Buffer-local keymaps only when an LSP attaches.
+      vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(args)
+          local buf = args.buf
+          local map = function(mode, lhs, rhs, desc)
+            vim.keymap.set(mode, lhs, rhs, { buffer = buf, desc = desc, silent = true })
+          end
+          map("n", "K", vim.lsp.buf.hover, "Hover")
+          map("n", "gd", vim.lsp.buf.definition, "Definition")
+          map("n", "gD", vim.lsp.buf.declaration, "Declaration")
+          map("n", "gi", vim.lsp.buf.implementation, "Implementation")
+          map("n", "gr", function() require("telescope.builtin").lsp_references() end, "References")
+          map("n", "<leader>rn", vim.lsp.buf.rename, "Rename")
+          map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, "Code action")
+          map("n", "<leader>e", vim.diagnostic.open_float, "Line diagnostics")
+          map("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, "Prev diagnostic")
+          map("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, "Next diagnostic")
+        end,
+      })
     end,
-  }
+  },
 }

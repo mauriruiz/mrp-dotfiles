@@ -1,9 +1,8 @@
 return {
-  -- rustaceanvim: modern rust-analyzer wrapper (runnables, debuggables, expand macro, test runner)
+  -- rustaceanvim: modern rust-analyzer wrapper (runnables, debuggables, expand macro, test runner).
   {
     "mrcjkb/rustaceanvim",
     version = "^6",
-    lazy = false,
     ft = { "rust" },
     init = function()
       vim.g.rustaceanvim = {
@@ -69,7 +68,7 @@ return {
     end,
   },
 
-  -- crates.nvim: Cargo.toml completion, version hints, upgrade actions
+  -- crates.nvim: Cargo.toml completion, version hints, upgrade actions.
   {
     "saecki/crates.nvim",
     tag = "stable",

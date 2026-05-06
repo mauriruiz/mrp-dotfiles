@@ -1,40 +1,58 @@
-vim.cmd("set expandtab")
-vim.cmd("set tabstop=2")
-vim.cmd("set softtabstop=2")
-vim.cmd("set shiftwidth=2")
+local opt = vim.opt
 
-vim.opt.number = true
-vim.opt.relativenumber = true
-vim.opt.cmdheight = 0
-vim.opt.clipboard = "unnamedplus"
 
-vim.g.maplocalleader = "\\"
-vim.g.mapleader = " "
+-- Indent
+opt.expandtab = true
+opt.tabstop = 2
+opt.softtabstop = 2
+opt.shiftwidth = 2
+opt.smartindent = true
 
+-- UI
+opt.number = true
+opt.relativenumber = true
+opt.cmdheight = 0
+opt.splitright = true
+opt.splitbelow = true
+opt.signcolumn = "yes"
+opt.termguicolors = true
+
+-- Performance
+opt.updatetime = 200
+opt.timeoutlen = 400
+opt.lazyredraw = false -- harmful with noice/lualine; default off is best
+opt.synmaxcol = 300
+
+-- Search
+opt.ignorecase = true
+opt.smartcase = true
+
+opt.clipboard = "unnamedplus"
+
+-- Diagnostics (modern API; replaces deprecated sign_define).
 vim.diagnostic.config({
-  virtual_text = {
-    spacing = 4,
-    prefix = "●",
+  virtual_text = { spacing = 4, prefix = "●" },
+  signs = {
+    text = {
+      [vim.diagnostic.severity.ERROR] = "",
+      [vim.diagnostic.severity.WARN]  = "",
+      [vim.diagnostic.severity.INFO]  = "",
+      [vim.diagnostic.severity.HINT]  = "",
+    },
   },
-  signs = true,
   underline = true,
   update_in_insert = false,
   severity_sort = true,
 })
 
--- Iconos de signos
-vim.fn.sign_define("DiagnosticSignError", {text = "", texthl="DiagnosticSignError"})
-vim.fn.sign_define("DiagnosticSignWarn",  {text = "", texthl="DiagnosticSignWarn"})
-vim.fn.sign_define("DiagnosticSignInfo",  {text = "", texthl="DiagnosticSignInfo"})
-vim.fn.sign_define("DiagnosticSignHint",  {text = "", texthl="DiagnosticSignHint"})
+-- Core keymaps
+local map = vim.keymap.set
+map("n", "<Esc>", "<cmd>nohlsearch<CR>", { silent = true })
+map("v", ">", ">gv")
+map("v", "<", "<gv")
 
-vim.keymap.set("n", "<Esc>", ":nohlsearch<CR>", { silent = true })
-vim.opt.splitright = true
-vim.keymap.set("v", ">", ">gv")
-vim.keymap.set("v", "<", "<gv")
-
--- Split navigation (immediate, not tied to toggleterm)
-vim.keymap.set("n", "<C-h>", "<C-w>h", { silent = true })
-vim.keymap.set("n", "<C-j>", "<C-w>j", { silent = true })
-vim.keymap.set("n", "<C-k>", "<C-w>k", { silent = true })
-vim.keymap.set("n", "<C-l>", "<C-w>l", { silent = true })
+-- Window navigation
+map("n", "<C-h>", "<C-w>h", { silent = true })
+map("n", "<C-j>", "<C-w>j", { silent = true })
+map("n", "<C-k>", "<C-w>k", { silent = true })
+map("n", "<C-l>", "<C-w>l", { silent = true })

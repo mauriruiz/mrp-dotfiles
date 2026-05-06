@@ -1,28 +1,22 @@
 return {
   "crnvl96/lazydocker.nvim",
-  dependencies = {
-    "nvim-lua/plenary.nvim",
-  },
-  config = function()
-    require("lazydocker").setup({
-      window = {
-        settings = {
-          width = 0.8,
-          height = 0.8,
-          border = "rounded",
-          relative = "editor",
-        },
-      },
-    })
-
-    -- Docker
-    vim.keymap.set(
-      { "n", "t" },
+  keys = {
+    {
       "<leader>ld",
-      function()
-        require("lazydocker").toggle({ engine = "docker" })
-      end,
-      { desc = "LazyDocker" }
-    )
-  end,
+      function() require("lazydocker").toggle({ engine = "docker" }) end,
+      mode = { "n", "t" },
+      desc = "LazyDocker",
+    },
+  },
+  dependencies = { "nvim-lua/plenary.nvim" },
+  opts = {
+    window = {
+      settings = {
+        width = 0.8,
+        height = 0.8,
+        border = "rounded",
+        relative = "editor",
+      },
+    },
+  },
 }
