@@ -21,7 +21,11 @@ return {
       telescope.setup({
         defaults = {
           layout_strategy = "horizontal",
-          layout_config = { width = 0.95, height = 0.85, preview_width = 0.55 },
+          layout_config = {
+            width = 0.95,
+            height = 0.85,
+            horizontal = { preview_width = 0.55 },
+          },
         },
         extensions = {
           ["ui-select"] = { require("telescope.themes").get_dropdown({}) },

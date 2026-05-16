@@ -91,6 +91,7 @@ return {
           map("n", "gr", function() require("telescope.builtin").lsp_references() end, "References")
           map("n", "<leader>rn", vim.lsp.buf.rename, "Rename")
           map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, "Code action")
+          map({ "n", "v" }, "<leader>cf", function() vim.lsp.buf.format({ async = true }) end, "Format")
           map("n", "<leader>e", vim.diagnostic.open_float, "Line diagnostics")
           map("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, "Prev diagnostic")
           map("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, "Next diagnostic")
