@@ -11,6 +11,12 @@ return {
           float_win_config = { border = "rounded" },
         },
         server = {
+          -- Always use the rustup proxy at ~/.cargo/bin/rust-analyzer. It auto-selects
+          -- the rust-analyzer matching the active toolchain (honours rust-toolchain.toml),
+          -- so it stays version-locked to rustc across `rustup update`. Avoids the stale
+          -- mason binary that rustaceanvim would otherwise prefer (proc-macro ABI skew →
+          -- derive macros like thiserror::Error fail to expand).
+          cmd = { vim.fn.expand("~/.cargo/bin/rust-analyzer") },
           default_settings = {
             ["rust-analyzer"] = {
               cargo = {
