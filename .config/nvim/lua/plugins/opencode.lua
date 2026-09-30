@@ -9,13 +9,7 @@ return {
     { "<S-C-u>", function() require("opencode").command("session.half.page.up") end, desc = "Scroll opencode up" },
     { "<S-C-d>", function() require("opencode").command("session.half.page.down") end, desc = "Scroll opencode down" },
   },
-  dependencies = {
-    {
-      "folke/snacks.nvim",
-      lazy = true,
-      opts = { input = {}, picker = {}, terminal = {} },
-    },
-  },
+  dependencies = { "folke/snacks.nvim" },
   init = function()
     -- opencode integration relies on autoread to refresh changed buffers.
     vim.o.autoread = true

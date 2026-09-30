@@ -1,10 +1,12 @@
-theme = Monokai Pro
+theme = Gruvbox Dark Hard
  
 confirm-close-surface = false
 mouse-hide-while-typing = true
 
-window-padding-x = 0
-window-padding-y = 1
+window-padding-x = 10
+window-padding-y = 6
+window-padding-balance = true
+window-padding-color = extend
 macos-window-shadow = false
 # macos-non-native-fullscreen = visible-menu
 # window-decoration = false

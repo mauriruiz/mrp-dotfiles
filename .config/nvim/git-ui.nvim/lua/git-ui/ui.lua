@@ -76,6 +76,7 @@ local minimal_opts = {
 local diff_win_opts = {
   number = true, relativenumber = false, signcolumn = "yes:1",
   wrap = false, cursorline = false, spell = false, list = false,
+  scrolloff = 0, sidescrolloff = 0, -- panes must share an exact topline
 }
 
 function M.open(status_width)
@@ -1199,9 +1200,11 @@ local function sync_win_to(src_win, dst_win)
   -- Clamp cursor row to dst buffer line count
   local dst_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(dst_win))
   local row = math.min(src_cursor[1], dst_count)
-  pcall(vim.api.nvim_win_set_cursor, dst_win, { row, src_cursor[2] })
+  if vim.fn.line("w0", dst_win) == top and vim.api.nvim_win_get_cursor(dst_win)[1] == row then return end
+  -- winrestview sets topline exactly; `{n}zt` is skewed by 'scrolloff' and moves
+  -- the cursor, which made the panes bounce each other's WinScrolled.
   pcall(vim.api.nvim_win_call, dst_win, function()
-    vim.cmd("normal! " .. top .. "zt")
+    vim.fn.winrestview({ topline = top, lnum = row, col = src_cursor[2] })
   end)
 end
 

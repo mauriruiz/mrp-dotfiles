@@ -7,10 +7,14 @@ return {
       { "<C-p>", desc = "Find files" },
       { "<leader>fg", desc = "Live grep (literal)" },
       { "<leader>fG", desc = "Live grep (regex)" },
+      { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
+      { "<leader>fd", "<cmd>Telescope diagnostics<cr>", desc = "Diagnostics" },
+      { "<leader>fs", "<cmd>Telescope lsp_dynamic_workspace_symbols<cr>", desc = "Workspace symbols" },
+      { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help" },
+      { "<leader>fr", "<cmd>Telescope resume<cr>", desc = "Resume last picker" },
     },
     dependencies = {
       "nvim-lua/plenary.nvim",
-      "nvim-telescope/telescope-ui-select.nvim",
     },
     config = function()
       local telescope = require("telescope")
@@ -20,18 +24,20 @@ return {
 
       telescope.setup({
         defaults = {
+          prompt_prefix = "   ",
+          selection_caret = "  ",
+          entry_prefix = "  ",
+          sorting_strategy = "ascending",
           layout_strategy = "horizontal",
           layout_config = {
             width = 0.95,
             height = 0.85,
-            horizontal = { preview_width = 0.55 },
+            horizontal = { prompt_position = "top", preview_width = 0.55 },
           },
+          file_ignore_patterns = { "^.git/", "^target/", "node_modules/" },
         },
-        extensions = {
-          ["ui-select"] = { require("telescope.themes").get_dropdown({}) },
-        },
+        pickers = { find_files = { hidden = true } },
       })
-      pcall(telescope.load_extension, "ui-select")
 
       -- <C-r> inside any grep picker: enter replace mode.
       local function enter_replace(prompt_bufnr)

@@ -1,6 +1,5 @@
 local opt = vim.opt
 
-
 -- Indent
 opt.expandtab = true
 opt.tabstop = 2
@@ -16,6 +15,16 @@ opt.splitright = true
 opt.splitbelow = true
 opt.signcolumn = "yes"
 opt.termguicolors = true
+opt.cursorline = true
+opt.showmode = false
+opt.laststatus = 3
+opt.scrolloff = 8
+opt.sidescrolloff = 8
+opt.wrap = false
+opt.pumheight = 12
+opt.fillchars = { eob = " " }
+opt.undofile = true
+opt.confirm = true
 
 -- Performance
 opt.updatetime = 200
@@ -32,6 +41,7 @@ opt.clipboard = "unnamedplus"
 -- Diagnostics (modern API; replaces deprecated sign_define).
 vim.diagnostic.config({
   virtual_text = { spacing = 4, prefix = "●" },
+  float = { border = "rounded", source = "if_many" },
   signs = {
     text = {
       [vim.diagnostic.severity.ERROR] = "",

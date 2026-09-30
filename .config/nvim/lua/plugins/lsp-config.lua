@@ -27,17 +27,9 @@ return {
   {
     "neovim/nvim-lspconfig",
     event = { "BufReadPre", "BufNewFile" },
-    dependencies = { "hrsh7th/cmp-nvim-lsp" },
+    -- blink.cmp registers its capabilities on vim.lsp.config("*") when loaded.
+    dependencies = { "saghen/blink.cmp" },
     config = function()
-      local capabilities = vim.tbl_deep_extend(
-        "force",
-        vim.lsp.protocol.make_client_capabilities(),
-        require("cmp_nvim_lsp").default_capabilities()
-      )
-
-      -- Apply capabilities to every server config registered via vim.lsp.config.
-      vim.lsp.config("*", { capabilities = capabilities })
-
       vim.lsp.config.lua_ls = {
         settings = {
           Lua = {
@@ -84,17 +76,26 @@ return {
           local map = function(mode, lhs, rhs, desc)
             vim.keymap.set(mode, lhs, rhs, { buffer = buf, desc = desc, silent = true })
           end
-          map("n", "K", vim.lsp.buf.hover, "Hover")
+          map("n", "K", function() vim.lsp.buf.hover({ border = "rounded" }) end, "Hover")
           map("n", "gd", vim.lsp.buf.definition, "Definition")
           map("n", "gD", vim.lsp.buf.declaration, "Declaration")
           map("n", "gi", vim.lsp.buf.implementation, "Implementation")
-          map("n", "gr", function() require("telescope.builtin").lsp_references() end, "References")
+          -- nowait: skip the timeout from 0.11's default gr* maps.
+          vim.keymap.set("n", "gr", function() require("telescope.builtin").lsp_references() end,
+            { buffer = buf, desc = "References", nowait = true })
           map("n", "<leader>rn", vim.lsp.buf.rename, "Rename")
           map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, "Code action")
-          map({ "n", "v" }, "<leader>cf", function() vim.lsp.buf.format({ async = true }) end, "Format")
           map("n", "<leader>e", vim.diagnostic.open_float, "Line diagnostics")
           map("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, "Prev diagnostic")
           map("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, "Next diagnostic")
+          map("n", "<leader>uh", function()
+            vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({ bufnr = buf }), { bufnr = buf })
+          end, "Toggle inlay hints")
+
+          local client = vim.lsp.get_client_by_id(args.data.client_id)
+          if client and client:supports_method("textDocument/inlayHint") then
+            vim.lsp.inlay_hint.enable(true, { bufnr = buf })
+          end
         end,
       })
     end,
