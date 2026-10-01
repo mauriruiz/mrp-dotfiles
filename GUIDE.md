@@ -69,6 +69,17 @@ search into a project-wide replace and `C-s` narrows it to one directory.
 
 Snippets: friendly-snippets, plus `iferr` and `errw` (wrap with `%w`) for Go.
 
+## Edit many places at once
+
+| Instead of (VSCode) | Do |
+|---|---|
+| Cursors down a column | `C-v`, select down (`j` or `5j`), `I` type `Esc` (or `A` to append, `c` to replace) |
+| Append to many line ends | `C-v`, select the lines, `$A` type `Esc` |
+| `Cmd+D` on each match | `*` on the word, `cgn` type `Esc`, then `.` for the next one (`n` skips) |
+| Change every match | `:%s/old/new/g` (`gc` asks each time; previews as you type) |
+| Rename a symbol | `grn` (language-aware, across files) |
+| Same edit on matching lines | `:g/pattern/normal A;` (any normal-mode keys) |
+
 ## Go (`\` in a Go file)
 
 | Key | Does |
@@ -95,7 +106,8 @@ Saving organizes imports and gofmts. golangci-lint runs on save when the repo ha
 | `\c` / `\p` / `\o` | Open Cargo.toml / parent module / docs.rs |
 | `\j` | Join lines, Rust-aware |
 
-Clippy runs on save. In `Cargo.toml`, `K` shows crate versions and `gra` upgrades them.
+Clippy runs on save. In `Cargo.toml`: `Space C v` / `C f` versions / features popup,
+`C u` / `C U` update / upgrade the crate, `C a` upgrade all, `C t` toggle hints, `C r` reload.
 
 ## Test and debug
 
@@ -121,7 +133,8 @@ Clippy runs on save. In `Cargo.toml`, `K` shows crate versions and `gra` upgrade
 | `Space g s` / `Space g d` | Changed files / changed hunks |
 | `]h` `[h` | Next / previous hunk |
 | `Space h s` / `h r` / `h p` | Stage / reset / preview hunk |
-| `Space h b` / `Space g L` | Blame line / history of this line |
+| `Space h b` / `Space g L` | Full blame for the line / history of this line |
+| `Space u b` | Toggle the inline blame after the current line |
 | `Space g B` | Open the file on GitHub |
 
 ## Terminals and AI
@@ -135,7 +148,7 @@ Clippy runs on save. In `Cargo.toml`, `K` shows crate versions and `gra` upgrade
 ## Toggles
 
 `Space u` then: `h` inlay hints · `d` diagnostics · `v` full diagnostic lines · `c` code lens ·
-`f` format on save · `w` wrap · `s` spell.
+`f` format on save · `b` line blame · `w` wrap · `s` spell.
 
 ## tmux (prefix `§` or `` ` ``)
 

@@ -9,6 +9,9 @@ font-size = 16
 font-thicken = true
 font-thicken-strength = 110
 font-style = Medium
+# Bold requests render at the regular weight, matching Neovim (gruvbox bold off).
+font-style-bold = false
+font-style-bold-italic = false
 adjust-cell-height = 20%
 
 window-padding-x = 10

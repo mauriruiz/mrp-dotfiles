@@ -14,6 +14,7 @@ require("gruvbox").setup({
     NormalFloat = { link = "Normal" },
     Pmenu = { link = "Normal" },
     SnacksIndentScope = { fg = c.dark4 },
+    GitSignsCurrentLineBlame = { fg = c.dark4, italic = true },
     -- Zed-like chrome: quiet gray frames, flat status bar, mode as text.
     FloatBorder = edge,
     BlinkCmpMenuBorder = edge,
@@ -117,6 +118,7 @@ pack.later(function()
     { "<leader>a", group = "ai" },
     { "<leader>b", group = "buffer" },
     { "<leader>c", group = "code" },
+    { "<leader>C", group = "crates" },
     { "<leader>d", group = "debug" },
     { "<leader>f", group = "find" },
     { "<leader>g", group = "git" },

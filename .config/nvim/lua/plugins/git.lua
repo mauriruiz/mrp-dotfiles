@@ -2,6 +2,9 @@ local map = vim.keymap.set
 
 require("gitsigns").setup({
   update_debounce = 200,
+  current_line_blame = true,
+  current_line_blame_opts = { delay = 600 },
+  current_line_blame_formatter = "   <author>, <author_time:%R> · <summary>",
   on_attach = function(buf)
     local gs = require("gitsigns")
     local function bmap(mode, lhs, rhs, desc) map(mode, lhs, rhs, { buffer = buf, desc = desc }) end
@@ -28,6 +31,14 @@ map("n", "<leader>gg", function()
   end
   require("git-ui").toggle()
 end, { desc = "Git UI" })
+
+Snacks.toggle
+  .new({
+    name = "Line blame",
+    get = function() return require("gitsigns.config").config.current_line_blame end,
+    set = function(on) require("gitsigns").toggle_current_line_blame(on) end,
+  })
+  :map("<leader>ub")
 
 map("n", "<leader>gl", function() Snacks.lazygit() end, { desc = "Lazygit" })
 map("n", "<leader>gf", function() Snacks.lazygit.log_file() end, { desc = "Lazygit file history" })
