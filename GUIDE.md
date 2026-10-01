@@ -137,13 +137,15 @@ Clippy runs on save. In `Cargo.toml`, `K` shows crate versions and `gra` upgrade
 `Space u` then: `h` inlay hints · `d` diagnostics · `v` full diagnostic lines · `c` code lens ·
 `f` format on save · `w` wrap · `s` spell.
 
-## tmux (prefix `§`)
+## tmux (prefix `§` or `` ` ``)
+
+Both keys work as the prefix, so `§ c` and `` ` c `` are the same. Type a literal backtick with `` ` e ``.
 
 | Key | Does |
 |---|---|
 | `§ f` | Switch to a project (creates its session the first time) |
 | `§ s` | Pick a session or window |
-| `§ c` / `§ §` | New window / previous window |
+| `§ c` / `§ §` (or `` ` ` ``) | New window / previous window |
 | `§ \|` / `§ -` | Split right / below |
 | `§ a` | Claude Code in a split |
 | `§ z` / `§ x` | Zoom / close pane |

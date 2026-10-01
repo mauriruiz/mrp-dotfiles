@@ -10,7 +10,7 @@ pick=$(
     find "$HOME/dev" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true
   } | awk 'NF && !seen[$0]++' |
     fzf --reverse --no-info --prompt 'project > ' \
-      --color 'bg:-1,gutter:-1,pointer:#89b4fa,prompt:#cba6f7,hl:#f9e2af,hl+:#f9e2af'
+      --color 'bg:-1,gutter:-1,pointer:#83a598,prompt:#d3869b,hl:#fabd2f,hl+:#fabd2f'
 ) || exit 0
 
 if tmux has-session -t "=$pick" 2>/dev/null; then

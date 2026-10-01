@@ -2,13 +2,13 @@
 # Emits the full tmux status-right string in one fork.
 # Performance: ~30ms total on macOS, runs every status-interval.
 
-DIM="${TMUX_DIM:-#6c7086}"
-FG="${TMUX_FG:-#cdd6f4}"
-CYAN="${TMUX_CYAN:-#89dceb}"
-YELLOW="${TMUX_YELLOW:-#f9e2af}"
-GREEN="${TMUX_GREEN:-#a6e3a1}"
-RED="${TMUX_RED:-#f38ba8}"
-ORANGE="${TMUX_ORANGE:-#fab387}"
+DIM="${TMUX_DIM:-#928374}"
+FG="${TMUX_FG:-#ebdbb2}"
+CYAN="${TMUX_CYAN:-#8ec07c}"
+YELLOW="${TMUX_YELLOW:-#fabd2f}"
+GREEN="${TMUX_GREEN:-#b8bb26}"
+RED="${TMUX_RED:-#fb4934}"
+ORANGE="${TMUX_ORANGE:-#fe8019}"
 
 sep="#[fg=${DIM}]│"
 

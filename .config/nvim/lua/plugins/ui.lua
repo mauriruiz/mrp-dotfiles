@@ -1,46 +1,38 @@
 local pack = require("config.pack")
 
-require("catppuccin").setup({
-  flavour = "mocha",
-  default_integrations = false,
-  integrations = {
-    blink_cmp = { enabled = true, style = "bordered" },
-    dap = true,
-    gitsigns = true,
-    grug_far = true,
-    mason = true,
-    mini = { enabled = true },
-    neotest = true,
-    neotree = true,
-    render_markdown = true,
-    snacks = { enabled = true },
-    which_key = true,
-  },
-  lsp_styles = { inlay_hints = { background = false } },
-  highlight_overrides = {
-    mocha = function(c)
-      local bar = { bg = c.mantle }
-      return {
-        -- Zed-like chrome: quiet gray frames, flat status bar, mode as text.
-        FloatBorder = { fg = c.surface1, bg = c.mantle },
-        FloatTitle = { fg = c.subtext0, bg = c.mantle },
-        BlinkCmpMenuBorder = { fg = c.surface1, bg = c.mantle },
-        WinSeparator = { fg = c.surface0 },
-        MiniStatuslineModeNormal = vim.tbl_extend("force", bar, { fg = c.blue, style = { "bold" } }),
-        MiniStatuslineModeInsert = vim.tbl_extend("force", bar, { fg = c.green, style = { "bold" } }),
-        MiniStatuslineModeVisual = vim.tbl_extend("force", bar, { fg = c.mauve, style = { "bold" } }),
-        MiniStatuslineModeReplace = vim.tbl_extend("force", bar, { fg = c.red, style = { "bold" } }),
-        MiniStatuslineModeCommand = vim.tbl_extend("force", bar, { fg = c.peach, style = { "bold" } }),
-        MiniStatuslineModeOther = vim.tbl_extend("force", bar, { fg = c.teal, style = { "bold" } }),
-        MiniStatuslineDevinfo = vim.tbl_extend("force", bar, { fg = c.overlay1 }),
-        MiniStatuslineFileinfo = vim.tbl_extend("force", bar, { fg = c.overlay1 }),
-        MiniStatuslineFilename = vim.tbl_extend("force", bar, { fg = c.subtext1 }),
-        MiniStatuslineInactive = vim.tbl_extend("force", bar, { fg = c.overlay0 }),
-      }
-    end,
+local c = require("gruvbox").palette
+local bar = { fg = c.gray, bg = c.dark0 }
+local function bar_fg(fg, bold) return vim.tbl_extend("force", bar, { fg = fg, bold = bold }) end
+local edge = { fg = c.dark2, bg = c.dark0_hard }
+require("gruvbox").setup({
+  contrast = "hard",
+  bold = false, -- bolded function names made code look heavy
+  overrides = {
+    SignColumn = { link = "Normal" },
+    LspInlayHint = { link = "Comment" },
+    -- Bordered floats and menus share the editor background instead of a grey slab.
+    NormalFloat = { link = "Normal" },
+    Pmenu = { link = "Normal" },
+    SnacksIndentScope = { fg = c.dark4 },
+    -- Zed-like chrome: quiet gray frames, flat status bar, mode as text.
+    FloatBorder = edge,
+    BlinkCmpMenuBorder = edge,
+    FloatTitle = { fg = c.light4, bg = c.dark0_hard },
+    WinSeparator = { fg = c.dark1 },
+    StatusLine = bar,
+    MiniStatuslineModeNormal = bar_fg(c.bright_blue, true),
+    MiniStatuslineModeInsert = bar_fg(c.bright_green, true),
+    MiniStatuslineModeVisual = bar_fg(c.bright_purple, true),
+    MiniStatuslineModeReplace = bar_fg(c.bright_red, true),
+    MiniStatuslineModeCommand = bar_fg(c.bright_orange, true),
+    MiniStatuslineModeOther = bar_fg(c.bright_aqua, true),
+    MiniStatuslineDevinfo = bar,
+    MiniStatuslineFileinfo = bar,
+    MiniStatuslineFilename = bar_fg(c.light3),
+    MiniStatuslineInactive = bar_fg(c.dark4),
   },
 })
-vim.cmd.colorscheme("catppuccin-mocha")
+vim.cmd.colorscheme("gruvbox")
 
 require("mini.icons").setup()
 MiniIcons.mock_nvim_web_devicons()

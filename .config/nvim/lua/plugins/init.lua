@@ -5,7 +5,7 @@ local function gh(repo) return "https://github.com/" .. repo end
 local M = {}
 
 M.eager = {
-  { src = gh("catppuccin/nvim"), name = "catppuccin", version = vim.version.range("2.*") },
+  gh("ellisonleao/gruvbox.nvim"),
   gh("folke/snacks.nvim"), -- picker, explorer, terminal, notifier, lazygit, input
   gh("nvim-mini/mini.nvim"), -- icons, statusline, surround
   gh("folke/which-key.nvim"),

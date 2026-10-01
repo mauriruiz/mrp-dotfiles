@@ -1,11 +1,11 @@
 # Ghostty renders; tmux owns sessions, windows and panes.
 
-theme = Catppuccin Mocha
+theme = Gruvbox Dark Hard
 
 # Lilex is Zed's default editor font (IBM Plex Mono with ligatures). Ghostty
 # embeds the Nerd Font symbols, so no patched font is needed.
 font-family = Lilex
-font-size = 14
+font-size = 16
 font-thicken = true
 font-thicken-strength = 110
 font-style = Medium

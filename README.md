@@ -6,7 +6,7 @@ Minimal macOS dev environment for Go and Rust: **Ghostty → tmux → Neovim 0.1
 
 - The repo holds the real files and mirrors `$HOME`; `$HOME` only holds symlinks.
 - No GNU Stow, no plugin managers beyond Neovim's builtin `vim.pack`, no TPM.
-- One look everywhere: Catppuccin Mocha and the Lilex font, Zed-style (Ghostty, tmux, Neovim, git-ui).
+- One look everywhere: Gruvbox Dark Hard and the Lilex font, Zed-style (Ghostty, tmux, Neovim, git-ui).
 - Each layer does one job:
   - **Ghostty** renders (fonts, colors, clipboard, OS integration).
   - **tmux** owns sessions (one per project), windows and panes; sessions survive terminal restarts.
