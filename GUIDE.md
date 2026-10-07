@@ -80,34 +80,32 @@ Snippets: friendly-snippets, plus `iferr` and `errw` (wrap with `%w`) for Go.
 | Rename a symbol | `grn` (language-aware, across files) |
 | Same edit on matching lines | `:g/pattern/normal A;` (any normal-mode keys) |
 
-## Go (`\` in a Go file)
+## Go and Rust (`\` in a Go or Rust file)
 
-| Key | Does |
-|---|---|
-| `\t` / `\T` | Add / remove struct tags (works on a selection) |
-| `\f` / `\s` | Fill struct / fill switch |
-| `\a` | Generate a test for the function |
-| `\m` | `go mod tidy` |
-| `\d` | Debug the test under the cursor |
-| `\o` / `\A` | Show compiler optimizations (inlining, escapes) / browse assembly |
-| `grx` | Run the code lens on the line (`go generate`, tidy, vulncheck in go.mod) |
+Same key, same meaning in both languages:
 
-Saving organizes imports and gofmts. golangci-lint runs on save when the repo has a
-`.golangci.*` config.
+| Key | Go | Rust |
+|---|---|---|
+| `\e` | Show the error under the cursor | Same, with the compiler's full rendering |
+| `\E` | Open the error's explanation page | `rustc --explain` for the error |
+| `\d` | Debug the test under the cursor | Debug the item under the cursor |
+| `\D` | Pick what to debug | Pick what to debug |
+| `\r` | `go run` this package | Pick what to run (binaries, tests, examples) |
+| `\a` | Code actions | Code actions, grouped |
+| `\o` | Open docs in the browser | Open docs.rs |
+| `\c` | Open `go.mod` | Open `Cargo.toml` |
 
-## Rust (`\` in a Rust file)
+Go only: `\t` / `\T` add / remove struct tags (works on a selection) · `\f` fill struct ·
+`\s` fill switch · `\g` generate a test for the function · `\m` `go mod tidy` ·
+`\i` show compiler decisions (inlining, escapes) · `\A` browse assembly · `grx` run the code lens
+on the line (`go generate`; tidy and vulncheck in go.mod).
 
-| Key | Does |
-|---|---|
-| `\r` / `\t` / `\d` | Pick something to run / test / debug |
-| `\e` / `\D` | Explain the error / show the full compiler diagnostic |
-| `\m` | Expand the macro under the cursor |
-| `\a` | Code actions, grouped |
-| `\c` / `\p` / `\o` | Open Cargo.toml / parent module / docs.rs |
-| `\j` | Join lines, Rust-aware |
+Rust only: `\m` expand macro · `\p` parent module · `\j` join lines · `K` hover with actions.
+In `Cargo.toml`: `Space C v` / `C f` versions / features, `C u` / `C U` update / upgrade the crate,
+`C a` upgrade all, `C t` toggle hints, `C r` reload.
 
-Clippy runs on save. In `Cargo.toml`: `Space C v` / `C f` versions / features popup,
-`C u` / `C U` update / upgrade the crate, `C a` upgrade all, `C t` toggle hints, `C r` reload.
+On save, Go organizes imports and gofmts (plus golangci-lint when the repo has a `.golangci.*`
+config); Rust runs rustfmt and clippy.
 
 ## Test and debug
 
