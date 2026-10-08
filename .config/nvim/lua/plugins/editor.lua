@@ -113,7 +113,12 @@ vim.api.nvim_create_autocmd("VimEnter", {
 })
 map("n", "<leader>bd", function() Snacks.bufdelete() end, { desc = "Delete buffer" })
 map("n", "<leader>bo", function() Snacks.bufdelete.other() end, { desc = "Delete other buffers" })
-map({ "n", "t" }, [[<C-\>]], function() Snacks.terminal.toggle() end, { desc = "Terminal" })
+map(
+  { "n", "t" },
+  [[<C-\>]],
+  function() Snacks.terminal.toggle(nil, { win = { position = "right", width = 0.35 } }) end,
+  { desc = "Terminal" }
+)
 map(
   "n",
   "<leader>ac",
